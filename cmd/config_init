@@ -1,0 +1,5 @@
+#!/bin/bash
+
+# This script is called before the configuration wizard is displayed.
+
+exit 0

@@ -1,0 +1,15 @@
+appname         = v2raya
+version         = 2.2.7.4
+desc            = v2rayA 是一个支持全局透明代理的 V2Ray 客户端，提供 Web 界面管理。
+arch            = x86_64
+maintainer      = v2rayA,v2ray-core
+distributor     = yuexps
+os_min_ver      = 0.8.1
+display_name    = v2rayA
+desktop_appname = v2raya.Application
+service_port    = 2017
+reloadui        = yes
+desktop_uidir   = ui
+changelog       = Update to v2rayA 2.2.7.4
+source          = thirdparty
+checksum        = e35a8208ed5d0d993ae2f954d7641aad

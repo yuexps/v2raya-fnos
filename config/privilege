@@ -1,0 +1,7 @@
+{
+    "defaults": {
+        "run-as": "root"
+    },
+    "username": "v2raya",
+    "groupname": "v2raya"
+}

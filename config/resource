@@ -1,0 +1,19 @@
+{
+    "data-share": {
+        "shares": [
+            {
+                "name": "v2raya",
+                "permission": {
+                    "rw": [
+                        "v2raya"
+                    ]
+                }
+            }
+        ]
+    },
+    "usr-local-linker": {
+        "bin": [
+            "v2raya"
+        ]
+    }
+}

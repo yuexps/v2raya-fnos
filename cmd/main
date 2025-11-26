@@ -1,0 +1,155 @@
+#!/bin/bash
+
+# 日志位置
+LOG_FILE="${TRIM_TEMP_LOGFILE}"
+PID_FILE="${TRIM_PKGVAR}/app.pid"
+
+# v2rayA 启动命令
+# --address 0.0.0.0:${TRIM_SERVICE_PORT} 监听所有网卡
+# --config ${TRIM_PKGVAR} 配置文件目录
+# --v2ray-bin ${TRIM_APPDEST}/v2ray/v2ray 指定 v2ray 核心路径
+# --v2ray-assetsdir ${TRIM_APPDEST}/v2ray 指定 geoip.dat 和 geosite.dat 所在目录
+CMD="${TRIM_APPDEST}/v2raya --address 0.0.0.0:${TRIM_SERVICE_PORT} --config ${TRIM_PKGVAR} --v2ray-bin ${TRIM_APPDEST}/v2ray/v2ray --v2ray-assetsdir ${TRIM_APPDEST}/v2ray"
+
+log_msg() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> ${LOG_FILE}
+}
+
+start_process() {
+    if status; then
+        return 0
+    fi
+
+    log_msg "Starting v2rayA process ..."
+    # 启动 v2rayA 进程
+
+    bash -c "${CMD}" &
+    # 写入 PID 到文件
+    printf "%s" "$!" > ${PID_FILE}
+    log_msg "v2rayA started with PID: $!"
+    return 0
+}
+
+stop_process() {
+    log_msg "Stopping v2rayA process ..."
+
+    local pid=""
+    
+    # 首先尝试从 PID_FILE 获取 PID
+    if [ -r "${PID_FILE}" ]; then
+        pid=$(head -n 1 "${PID_FILE}" | tr -d '[:space:]')
+        log_msg "pid=${pid} from PID_FILE"
+        
+        # 检查进程是否存在且匹配我们的命令
+        if check_process "${pid}" && verify_process "${pid}"; then
+            log_msg "Verified process matches CMD"
+        else
+            # 进程不存在或不匹配，删除 pidfile
+            rm -f "${PID_FILE}"
+            log_msg "Process not found or doesn't match by PID_FILE, trying ps aux..."
+            pid=""
+        fi
+    fi
+    
+    # 如果 PID_FILE 方法失败，尝试搜索进程列表
+    if [ -z "${pid}" ]; then
+        pid=$(ps aux | grep -v grep | grep "${TRIM_APPDEST}/v2raya" | awk '{print $2}')
+        
+        if [ -z "${pid}" ]; then
+            log_msg "Process not found"
+            rm -f "${PID_FILE}"
+            return 0
+        fi
+        log_msg "Found process with PID: ${pid} from ps aux"
+    fi
+
+    log_msg "send TERM signal to PID:${pid}..."
+    kill -TERM ${pid} >> ${LOG_FILE} 2>&1
+
+    local count=0
+    while check_process "${pid}" && [ $count -lt 10 ]; do
+        sleep 1
+        count=$((count + 1))
+        log_msg "waiting process terminal... (${count}s/10s)"
+    done
+
+    if check_process "${pid}"; then
+        log_msg "send KILL signal to PID:${pid}..."
+        kill -KILL "${pid}" >> ${LOG_FILE} 2>&1
+        sleep 1
+    else
+        log_msg "process killed... "
+    fi
+    
+    # 清理 pidfile
+    rm -f "${PID_FILE}"
+    return 0
+}
+
+check_process() {
+    local pid=$1
+    if [ -n "${pid}" ] && kill -0 "${pid}" 2>/dev/null; then
+        return 0  # 进程存在
+    else
+        return 1  # 进程不存在
+    fi
+}
+
+verify_process() {
+    local pid=$1
+    # 验证进程是否匹配我们的 CMD
+    if ps aux | grep -v grep | grep "${TRIM_APPDEST}/v2raya" | awk '{print $2}' | grep -q "^${pid}$"; then
+        return 0  # 进程匹配
+    else
+        return 1  # 进程不匹配
+    fi
+}
+
+status() {
+    # 首先检查 PID_FILE
+    if [ -f "${PID_FILE}" ]; then
+        local pid=$(head -n 1 "${PID_FILE}" | tr -d '[:space:]')
+        # 检查进程是否存在且匹配我们的命令
+        if check_process "${pid}" && verify_process "${pid}"; then
+            return 0
+        else
+            # 进程未运行或不匹配 - 清理 pidfile
+            rm -f "${PID_FILE}"
+            log_msg "PID_FILE invalid, cleaned up"
+        fi    
+    fi
+
+    # 回退方案：通过在 ps aux 中搜索来检查进程是否运行
+    # 如果找到进程则修复 PID_FILE
+    local pid=$(ps aux | grep -v grep | grep "${TRIM_APPDEST}/v2raya" | awk '{print $2}' | head -n 1)
+    if [ -n "${pid}" ]; then
+        # 找到进程，修复 PID_FILE
+        printf "%s" "${pid}" > ${PID_FILE}
+        log_msg "Process found with PID=${pid}, repaired PID_FILE"
+        return 0
+    fi
+    
+    return 1
+}
+
+case $1 in
+start)
+    # 运行启动命令。成功退出 0，失败退出 1
+    start_process
+    ;;
+stop)
+    # 运行停止命令。成功退出 0，失败退出 1
+    stop_process
+    ;;
+status)
+    # 检查应用状态命令。运行中退出 0，未运行退出 3
+    if status; then 
+        exit 0
+    else 
+        exit 3
+    fi
+    ;;
+*)
+    exit 1
+    ;;
+esac

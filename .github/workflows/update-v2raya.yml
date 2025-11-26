@@ -1,0 +1,182 @@
+name: Update v2rayA and v2ray-core
+
+on:
+  schedule:
+    # 每周五 UTC 2:00 (北京时间 10:00) 检查更新
+    - cron: '0 2 * * 5'
+  workflow_dispatch:
+    # 允许手动触发
+    inputs:
+      force:
+        description: '强制构建（忽略版本检查）'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+        - 'true'
+        - 'false'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-and-update:
+    runs-on: ubuntu-22.04
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Get latest v2rayA version
+      id: v2raya
+      run: |
+        LATEST=$(curl -s https://api.github.com/repos/v2rayA/v2rayA/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+        echo "version=$LATEST" >> $GITHUB_OUTPUT
+        echo "Latest v2rayA version: $LATEST"
+        
+    - name: Get latest v2ray-core version
+      id: v2ray
+      run: |
+        LATEST=$(curl -s https://api.github.com/repos/v2fly/v2ray-core/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+        echo "version=$LATEST" >> $GITHUB_OUTPUT
+        echo "Latest v2ray-core version: $LATEST"
+        
+    - name: Get current versions from manifest
+      id: current
+      run: |
+        CURRENT_V2RAYA=$(grep '^version' manifest | awk -F'=' '{print $2}' | tr -d ' ')
+        echo "v2raya=$CURRENT_V2RAYA" >> $GITHUB_OUTPUT
+        echo "Current v2rayA version in manifest: $CURRENT_V2RAYA"
+        
+    - name: Check if update needed
+      id: check
+      run: |
+        FORCE_UPDATE="${{ github.event.inputs.force || 'false' }}"
+        if [ "$FORCE_UPDATE" = "true" ]; then
+          echo "needs_update=true" >> $GITHUB_OUTPUT
+          echo "Force update enabled"
+        elif [ "${{ steps.v2raya.outputs.version }}" != "${{ steps.current.outputs.v2raya }}" ]; then
+          echo "needs_update=true" >> $GITHUB_OUTPUT
+          echo "Update needed: v2rayA ${{ steps.current.outputs.v2raya }} -> ${{ steps.v2raya.outputs.version }}"
+        else
+          echo "needs_update=false" >> $GITHUB_OUTPUT
+          echo "No update needed (v2rayA is already at ${{ steps.current.outputs.v2raya }})"
+        fi
+        
+    - name: Download v2rayA binary
+      if: steps.check.outputs.needs_update == 'true'
+      run: |
+        VERSION="${{ steps.v2raya.outputs.version }}"
+        wget "https://github.com/v2rayA/v2rayA/releases/download/v${VERSION}/v2raya_linux_x64_${VERSION}" -O app/v2raya
+        chmod +x app/v2raya
+        
+    - name: Download v2ray-core
+      if: steps.check.outputs.needs_update == 'true'
+      run: |
+        VERSION="${{ steps.v2ray.outputs.version }}"
+        wget "https://github.com/v2fly/v2ray-core/releases/download/v${VERSION}/v2ray-linux-64.zip" -O v2ray.zip
+        unzip -o v2ray.zip -d v2ray-temp
+        
+        # 只保留需要的文件
+        mv v2ray-temp/v2ray app/v2ray/v2ray
+        chmod +x app/v2ray/v2ray
+        
+        # 更新 dat 文件
+        mv v2ray-temp/geoip.dat app/v2ray/geoip.dat
+        mv v2ray-temp/geosite.dat app/v2ray/geosite.dat
+        
+        # 清理临时文件
+        rm -rf v2ray-temp v2ray.zip
+        
+    - name: Update manifest version
+      if: steps.check.outputs.needs_update == 'true'
+      run: |
+        V2RAYA_VERSION="${{ steps.v2raya.outputs.version }}"
+        sed -i "s/^version.*$/version         = ${V2RAYA_VERSION}/" manifest
+        sed -i "s/^changelog.*$/changelog       = Update to v2rayA ${V2RAYA_VERSION}/" manifest
+        
+        echo "Updated manifest version to ${V2RAYA_VERSION}"
+        
+    - name: Update README
+      if: steps.check.outputs.needs_update == 'true'
+      run: |
+        V2RAYA_VERSION="${{ steps.v2raya.outputs.version }}"
+        V2RAY_VERSION="${{ steps.v2ray.outputs.version }}"
+        
+        sed -i "s/- v2rayA Version: .*/- v2rayA Version: ${V2RAYA_VERSION}/" README.md
+        sed -i "s/- v2ray-core Version: .*/- v2ray-core Version: ${V2RAY_VERSION}/" README.md
+        
+    - name: Calculate checksum
+      if: steps.check.outputs.needs_update == 'true'
+      run: |
+        # 计算 v2raya 二进制文件的 MD5 checksum
+        CHECKSUM=$(md5sum app/v2raya | awk '{print $1}')
+        sed -i "s/^checksum.*$/checksum        = ${CHECKSUM}/" manifest
+        echo "Updated checksum to ${CHECKSUM}"
+        
+    - name: Install fnpack
+      if: steps.check.outputs.needs_update == 'true'
+      run: |
+        wget https://static2.fnnas.com/fnpack/fnpack-1.0.4-linux-amd64 -O fnpack
+        chmod +x fnpack
+        sudo mv fnpack /usr/local/bin/
+        
+    - name: Build fpk package
+      if: steps.check.outputs.needs_update == 'true'
+      run: |
+        fnpack build
+        # 获取生成的 fpk 文件名
+        FPK_FILE=$(ls *.fpk | head -n 1)
+        echo "fpk_file=${FPK_FILE}" >> $GITHUB_OUTPUT
+        echo "FPK package built: ${FPK_FILE}"
+      id: build
+        
+    - name: Delete old pre-releases
+      if: steps.check.outputs.needs_update == 'true'
+      run: |
+        # 删除所有旧的 pre-release
+        gh release list --limit 100 | grep -i "pre-release" | awk '{print $1}' | while read tag; do
+          echo "Deleting old pre-release: $tag"
+          gh release delete "$tag" --yes || true
+        done
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Create Pre-release
+      if: steps.check.outputs.needs_update == 'true'
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v${{ steps.v2raya.outputs.version }}-pre
+        name: v2rayA ${{ steps.v2raya.outputs.version }} (Pre-release)
+        body: |
+          ## 🚀 Auto-built Pre-release
+          
+          This version is automatically built and published by GitHub Actions.
+          
+          ### 📦 Update Details
+          - v2rayA: ${{ steps.current.outputs.v2raya }} → ${{ steps.v2raya.outputs.version }}
+          - v2ray-core: ${{ steps.v2ray.outputs.version }}
+          - Updated geoip.dat and geosite.dat files
+          
+          ### ⚠️ Notes
+          - This is a pre-release version. Please test and verify first.
+          - Use this package for installation and upgrade only after successful testing.
+          
+          ### 📋 Upstream Release Notes
+          - [v2rayA Release Notes](https://github.com/v2rayA/v2rayA/releases/tag/v${{ steps.v2raya.outputs.version }})
+          - [v2ray-core Release Notes](https://github.com/v2fly/v2ray-core/releases/tag/v${{ steps.v2ray.outputs.version }})
+        files: ${{ steps.build.outputs.fpk_file }}
+        prerelease: true
+        draft: false
+        
+    - name: Commit and push changes
+      if: steps.check.outputs.needs_update == 'true'
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        
+        git add app/ manifest README.md
+        
+        git diff --staged --quiet || git commit -m "chore: update to v2rayA ${{ steps.v2raya.outputs.version }} and v2ray-core ${{ steps.v2ray.outputs.version }}"
+        git push
