@@ -1,15 +1,18 @@
 #!/bin/bash
 
 # 日志位置
-LOG_FILE="${TRIM_TEMP_LOGFILE}"
-PID_FILE="${TRIM_PKGVAR}/app.pid"
+LOG_FILE="${TRIM_PKGVAR}/v2raya.log"
+PID_FILE="${TRIM_PKGVAR}/v2raya.pid"
 
 # v2rayA 启动命令
 # --address 0.0.0.0:${TRIM_SERVICE_PORT} 监听所有网卡
 # --config ${TRIM_PKGVAR} 配置文件目录
 # --v2ray-bin ${TRIM_APPDEST}/v2ray/v2ray 指定 v2ray 核心路径
 # --v2ray-assetsdir ${TRIM_APPDEST}/v2ray 指定 geoip.dat 和 geosite.dat 所在目录
-CMD="${TRIM_APPDEST}/v2raya --address 0.0.0.0:${TRIM_SERVICE_PORT} --config ${TRIM_PKGVAR} --v2ray-bin ${TRIM_APPDEST}/v2ray/v2ray --v2ray-assetsdir ${TRIM_APPDEST}/v2ray"
+# --log-file ${LOG_FILE} 日志文件路径，供 WebUI 读取
+# --log-level info 日志等级
+# --log-max-days 3 日志保留天数
+CMD="${TRIM_APPDEST}/v2raya --address 0.0.0.0:${TRIM_SERVICE_PORT} --config ${TRIM_PKGVAR} --v2ray-bin ${TRIM_APPDEST}/v2ray/v2ray --v2ray-assetsdir ${TRIM_APPDEST}/v2ray --log-file ${LOG_FILE} --log-level info --log-max-days 3"
 
 log_msg() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> ${LOG_FILE}
@@ -22,8 +25,7 @@ start_process() {
 
     log_msg "Starting v2rayA process ..."
     # 启动 v2rayA 进程
-
-    bash -c "${CMD}" &
+    bash -c "${CMD}" >> ${LOG_FILE} 2>&1 &
     # 写入 PID 到文件
     printf "%s" "$!" > ${PID_FILE}
     log_msg "v2rayA started with PID: $!"
