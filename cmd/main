@@ -25,7 +25,7 @@ start_process() {
 
     log_msg "Starting v2rayA process ..."
     # 启动 v2rayA 进程
-    bash -c "${CMD}" >> ${LOG_FILE} 2>&1 &
+    bash -c "${CMD}" &
     # 写入 PID 到文件
     printf "%s" "$!" > ${PID_FILE}
     log_msg "v2rayA started with PID: $!"
