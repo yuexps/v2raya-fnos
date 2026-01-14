@@ -148,9 +148,8 @@ jobs:
     - name: Install fnpack
       if: steps.check.outputs.needs_update == 'true'
       run: |
-        wget https://static2.fnnas.com/fnpack/fnpack-1.0.4-linux-amd64 -O fnpack
-        chmod +x fnpack
-        sudo mv fnpack /usr/local/bin/
+        chmod +x build/fnpack-1.2.0-linux-amd64
+        sudo cp build/fnpack-1.2.0-linux-amd64 /usr/local/bin/fnpack
         
     - name: Build fpk package
       if: steps.check.outputs.needs_update == 'true'
