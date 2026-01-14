@@ -33,18 +33,6 @@ You can change the core selection at any time through the application settings:
 3. Choose your preferred proxy core
 4. Restart the application to apply the change
 
-### Manual Configuration (Advanced)
-You can also manually set the `CORE_TYPE` environment variable before starting the application:
-```bash
-# Use v2ray-core (default)
-export CORE_TYPE=v2ray
-
-# Use xray-core
-export CORE_TYPE=xray
-```
-
-For detailed configuration information, see [CORE_CONFIG_GUIDE.md](CORE_CONFIG_GUIDE.md).
-
 ## Resources
 
 - [FNOS](https://developer.fnnas.com/docs/guide)
