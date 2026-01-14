@@ -1,0 +1,18 @@
+#!/bin/bash
+
+# This script is called after the user completes the installation wizard.
+# Save the core type selection to environment configuration
+
+# 获取用户选择的核心类型
+CORE_TYPE="${wizard_core_type:-v2ray}"
+
+# 创建环境变量配置文件
+ENV_CONFIG_DIR="${TRIM_PKGVAR}/env"
+mkdir -p "${ENV_CONFIG_DIR}"
+
+# 保存核心类型到配置文件
+echo "${CORE_TYPE}" > "${ENV_CONFIG_DIR}/CORE_TYPE"
+
+echo "Core type selection saved: ${CORE_TYPE}"
+
+exit 0

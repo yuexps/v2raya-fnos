@@ -1,0 +1,50 @@
+[
+    {
+        "stepTitle": "欢迎安装v2rayA",
+        "items": [
+            {
+                "type": "tips",
+                "helpText": "欢迎使用v2rayA！v2rayA是一个支持全局透明代理的V2Ray客户端，提供Web界面管理。"
+            },
+            {
+                "type": "tips",
+                "helpText": "本版本同时包含v2ray-core和xray-core两个代理核心，您可以选择更适合您的一个使用。"
+            }
+        ]
+    },
+    {
+        "stepTitle": "选择代理核心",
+        "items": [
+            {
+                "type": "tips",
+                "helpText": "请选择您要使用的代理核心。您可以随时切换，但需要重启应用。"
+            },
+            {
+                "type": "radio",
+                "field": "wizard_core_type",
+                "label": "代理核心选择",
+                "initValue": "v2ray",
+                "options": [
+                    {
+                        "label": "v2ray-core - v2fly项目的V2Ray实现",
+                        "value": "v2ray"
+                    },
+                    {
+                        "label": "xray-core - XTLS项目的Xray实现",
+                        "value": "xray"
+                    }
+                ],
+                "rules": [
+                    {
+                        "required": true,
+                        "message": "请选择代理核心"
+                    }
+                ]
+            },
+            {
+                "type": "tips",
+                "helpText": "<strong>说明：</strong><br/>• <strong>v2ray-core</strong>: v2fly项目<br/>• <strong>xray-core</strong>: XTLS项目"
+            }
+        ]
+    }
+]

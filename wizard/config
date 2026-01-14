@@ -1,0 +1,33 @@
+[
+    {
+        "stepTitle": "核心选择",
+        "items": [
+            {
+                "type": "tips",
+                "helpText": "选择要使用的代理核心。修改后需要重启应用才能生效。"
+            },
+            {
+                "type": "radio",
+                "field": "wizard_core_type",
+                "label": "代理核心",
+                "initValue": "v2ray",
+                "options": [
+                    {
+                        "label": "v2ray-core - v2fly项目",
+                        "value": "v2ray"
+                    },
+                    {
+                        "label": "xray-core - XTLS项目",
+                        "value": "xray"
+                    }
+                ],
+                "rules": [
+                    {
+                        "required": true,
+                        "message": "请选择代理核心"
+                    }
+                ]
+            }
+        ]
+    }
+]
