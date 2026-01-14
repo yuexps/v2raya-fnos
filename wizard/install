@@ -43,7 +43,7 @@
             },
             {
                 "type": "tips",
-                "helpText": "<strong>说明：</strong><br/>• <strong>v2ray-core</strong>: v2fly项目<br/>• <strong>xray-core</strong>: XTLS项目"
+                "helpText": "<strong>说明：</strong><br/>• <strong>v2ray-core</strong>: v2fly项目的V2Ray实现，功能完整，支持VMess、Shadowsocks等多种协议，社区活跃，文档齐全<br/>• <strong>xray-core</strong>: 基于V2Ray开发的分支项目，新增XTLS协议支持，性能优异，更新频率高，提供增强的隐蔽性和传输效率"
             }
         ]
     }

@@ -19,12 +19,10 @@ After installation, access the web interface via the fnOS desktop icon.
 
 ## Core Selection
 
-This application includes both v2ray-core and xray-core. You can choose which one to use:
-
 ### During Installation
 The installation wizard will prompt you to select your preferred proxy core:
-- **v2ray-core** (default) - Stable and recommended for most users
-- **xray-core** - Feature-rich implementation with support for XTLS and more protocols
+- **v2ray-core**
+- **xray-core**
 
 ### After Installation
 You can change the core selection at any time through the application settings:

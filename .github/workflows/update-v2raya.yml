@@ -191,9 +191,6 @@ jobs:
           
           ### ⚠️ Notes
           - This is a pre-release version. Please test and verify first.
-          - Both v2ray-core and xray-core are included. Use `CORE_TYPE=xray` to switch to xray-core.
-          - Default core is v2ray-core. Set `CORE_TYPE=v2ray` explicitly or omit to use it.
-          - See [CORE_SELECTION.md](../CORE_SELECTION.md) for more information.
           
           ### 📋 Upstream Release Notes
           - [v2rayA Release Notes](https://github.com/v2rayA/v2rayA/releases/tag/v${{ steps.v2raya.outputs.version }})
