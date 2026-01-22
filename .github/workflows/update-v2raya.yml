@@ -57,12 +57,25 @@ jobs:
         echo "version=$LATEST" >> $GITHUB_OUTPUT
         echo "Latest xray-core version: $LATEST"
         
-    - name: Get current versions from manifest
+    - name: Get current upstream versions
       id: current
       run: |
-        CURRENT_V2RAYA=$(grep '^version' manifest | awk -F'=' '{print $2}' | tr -d ' ')
+        CHANGELOG=$(grep '^changelog' manifest | sed 's/^changelog.*= //')
+        
+        # 从 changelog 中提取版本号
+        # 格式: Update to v2rayA X.X.X with v2ray-core X.X.X and xray-core X.X.X
+        CURRENT_V2RAYA=$(echo "$CHANGELOG" | grep -oP 'v2rayA \K[^ ]+' || echo "")
+        CURRENT_V2RAY=$(echo "$CHANGELOG" | grep -oP 'v2ray-core \K[^ ]+' || echo "")
+        CURRENT_XRAY=$(echo "$CHANGELOG" | grep -oP 'xray-core \K[^ ]+' || echo "")
+        
         echo "v2raya=$CURRENT_V2RAYA" >> $GITHUB_OUTPUT
-        echo "Current v2rayA version in manifest: $CURRENT_V2RAYA"
+        echo "v2ray=$CURRENT_V2RAY" >> $GITHUB_OUTPUT
+        echo "xray=$CURRENT_XRAY" >> $GITHUB_OUTPUT
+        
+        echo "Current upstream versions from changelog:"
+        echo "  v2rayA: $CURRENT_V2RAYA"
+        echo "  v2ray-core: $CURRENT_V2RAY"
+        echo "  xray-core: $CURRENT_XRAY"
         
     - name: Check if update needed
       id: check
@@ -71,12 +84,17 @@ jobs:
         if [ "$FORCE_UPDATE" = "true" ]; then
           echo "needs_update=true" >> $GITHUB_OUTPUT
           echo "Force update enabled"
-        elif [ "${{ steps.v2raya.outputs.version }}" != "${{ steps.current.outputs.v2raya }}" ]; then
+        elif [ "${{ steps.v2raya.outputs.version }}" != "${{ steps.current.outputs.v2raya }}" ] || \
+             [ "${{ steps.v2ray.outputs.version }}" != "${{ steps.current.outputs.v2ray }}" ] || \
+             [ "${{ steps.xray.outputs.version }}" != "${{ steps.current.outputs.xray }}" ]; then
           echo "needs_update=true" >> $GITHUB_OUTPUT
-          echo "Update needed: v2rayA ${{ steps.current.outputs.v2raya }} -> ${{ steps.v2raya.outputs.version }}"
+          echo "Update needed:"
+          echo "  v2rayA: ${{ steps.current.outputs.v2raya }} -> ${{ steps.v2raya.outputs.version }}"
+          echo "  v2ray-core: ${{ steps.current.outputs.v2ray }} -> ${{ steps.v2ray.outputs.version }}"
+          echo "  xray-core: ${{ steps.current.outputs.xray }} -> ${{ steps.xray.outputs.version }}"
         else
           echo "needs_update=false" >> $GITHUB_OUTPUT
-          echo "No update needed (v2rayA is already at ${{ steps.current.outputs.v2raya }})"
+          echo "No update needed (all components are up to date)"
         fi
         
     - name: Download v2rayA binary
@@ -128,13 +146,15 @@ jobs:
     - name: Update manifest version
       if: steps.check.outputs.needs_update == 'true'
       run: |
+        # 生成日期版本号 (YY.M.D)
+        DATE_VERSION=$(date +%y.%-m.%-d)
         V2RAYA_VERSION="${{ steps.v2raya.outputs.version }}"
         V2RAY_VERSION="${{ steps.v2ray.outputs.version }}"
         XRAY_VERSION="${{ steps.xray.outputs.version }}"
-        sed -i "s/^version.*$/version         = ${V2RAYA_VERSION}/" manifest
+        sed -i "s/^version.*$/version         = ${DATE_VERSION}/" manifest
         sed -i "s/^changelog.*$/changelog       = Update to v2rayA ${V2RAYA_VERSION} with v2ray-core ${V2RAY_VERSION} and xray-core ${XRAY_VERSION}/" manifest
         
-        echo "Updated manifest version to ${V2RAYA_VERSION}"
+        echo "Updated manifest version to ${DATE_VERSION}"
         
     - name: Update README
       if: steps.check.outputs.needs_update == 'true'
