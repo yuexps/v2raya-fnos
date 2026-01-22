@@ -8,5 +8,5 @@ os_min_version  = 0.9.0
 display_name    = v2rayA
 desktop_uidir   = ui
 desktop_applaunchname = v2raya.Application
-changelog       = Update to v2rayA 2.2.7.4
+changelog       = Update to v2rayA 2.2.7.4 with v2ray-core 5.44.1 and xray-core 26.1.18
 source          = thirdparty
