@@ -15,6 +15,14 @@ on:
         options:
         - 'true'
         - 'false'
+      create_release:
+        description: '是否发布 pre-release'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+        - 'true'
+        - 'false'
 
 permissions:
   contents: write
@@ -155,8 +163,16 @@ jobs:
         echo "FPK package built: ${FPK_FILE}"
       id: build
         
-    - name: Delete old pre-releases
+    - name: Upload fpk artifact
       if: steps.check.outputs.needs_update == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: v2rayA-${{ steps.v2raya.outputs.version }}.fpk
+        path: ${{ steps.build.outputs.fpk_file }}
+        retention-days: 30
+        
+    - name: Delete old pre-releases
+      if: steps.check.outputs.needs_update == 'true' && (github.event_name == 'schedule' || github.event.inputs.create_release == 'true')
       run: |
         # 删除所有旧的 pre-release
         gh release list --limit 100 | grep -i "pre-release" | awk '{print $1}' | while read tag; do
@@ -167,7 +183,7 @@ jobs:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         
     - name: Create Pre-release
-      if: steps.check.outputs.needs_update == 'true'
+      if: steps.check.outputs.needs_update == 'true' && (github.event_name == 'schedule' || github.event.inputs.create_release == 'true')
       uses: softprops/action-gh-release@v1
       with:
         tag_name: v${{ steps.v2raya.outputs.version }}-pre
