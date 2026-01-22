@@ -40,6 +40,12 @@ start_process() {
         return 0
     fi
 
+    # 校验端口是否被占用
+    if netstat -tuln 2>/dev/null | grep -q ":${SERVICE_PORT} "; then
+        echo "Error: Port ${SERVICE_PORT} is already in use" > "${TRIM_TEMP_LOGFILE}"
+        exit 1
+    fi
+
     log_msg "Starting v2rayA process ..."
     # 启动 v2rayA 进程
     bash -c "${CMD}" &

@@ -2,13 +2,4 @@
 
 # This script is called before the configuration wizard is displayed.
 
-# 获取用户配置的端口
-PORT="${wizard_port:-2017}"
-
-# 校验端口是否被占用
-if ss -tuln 2>/dev/null | grep -q ":${PORT} "; then
-    echo "Error: Port ${PORT} is already in use" > "${TRIM_TEMP_LOGFILE}"
-    exit 1
-fi
-
 exit 0

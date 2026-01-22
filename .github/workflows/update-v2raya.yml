@@ -150,8 +150,8 @@ jobs:
     - name: Install fnpack
       if: steps.check.outputs.needs_update == 'true'
       run: |
-        chmod +x build/fnpack-1.2.0-linux-amd64
-        sudo cp build/fnpack-1.2.0-linux-amd64 /usr/local/bin/fnpack
+        chmod +x build/fnpack-1.2.1-linux-amd64
+        sudo cp build/fnpack-1.2.1-linux-amd64 /usr/local/bin/fnpack
         
     - name: Build fpk package
       if: steps.check.outputs.needs_update == 'true'
