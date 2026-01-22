@@ -167,8 +167,9 @@ jobs:
       if: steps.check.outputs.needs_update == 'true'
       uses: actions/upload-artifact@v4
       with:
-        name: v2rayA-${{ steps.v2raya.outputs.version }}.fpk
-        path: ${{ steps.build.outputs.fpk_file }}
+        name: v2rayA-${{ steps.v2raya.outputs.version }}
+        path: |
+          *.fpk
         retention-days: 30
         
     - name: Delete old pre-releases
