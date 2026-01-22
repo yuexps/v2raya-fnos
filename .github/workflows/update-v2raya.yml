@@ -121,8 +121,10 @@ jobs:
       if: steps.check.outputs.needs_update == 'true'
       run: |
         V2RAYA_VERSION="${{ steps.v2raya.outputs.version }}"
+        V2RAY_VERSION="${{ steps.v2ray.outputs.version }}"
+        XRAY_VERSION="${{ steps.xray.outputs.version }}"
         sed -i "s/^version.*$/version         = ${V2RAYA_VERSION}/" manifest
-        sed -i "s/^changelog.*$/changelog       = Update to v2rayA ${V2RAYA_VERSION}/" manifest
+        sed -i "s/^changelog.*$/changelog       = Update to v2rayA ${V2RAYA_VERSION} with v2ray-core ${V2RAY_VERSION} and xray-core ${XRAY_VERSION}/" manifest
         
         echo "Updated manifest version to ${V2RAYA_VERSION}"
         
@@ -136,14 +138,6 @@ jobs:
         sed -i "s/- v2rayA Version: .*/- v2rayA Version: ${V2RAYA_VERSION}/" README.md
         sed -i "s/- v2ray-core Version: .*/- v2ray-core Version: ${V2RAY_VERSION}/" README.md
         sed -i "s/- xray-core Version: .*/- xray-core Version: ${XRAY_VERSION}/" README.md
-        
-    - name: Calculate checksum
-      if: steps.check.outputs.needs_update == 'true'
-      run: |
-        # 计算 v2raya 二进制文件的 MD5 checksum
-        CHECKSUM=$(md5sum app/v2raya | awk '{print $1}')
-        sed -i "s/^checksum.*$/checksum        = ${CHECKSUM}/" manifest
-        echo "Updated checksum to ${CHECKSUM}"
         
     - name: Install fnpack
       if: steps.check.outputs.needs_update == 'true'

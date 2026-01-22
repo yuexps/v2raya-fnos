@@ -4,6 +4,10 @@
 LOG_FILE="${TRIM_PKGVAR}/v2raya.log"
 PID_FILE="${TRIM_PKGVAR}/v2raya.pid"
 
+# 获取 Web 界面端口
+# 优先级: 环境变量 wizard_port > 默认值 2017
+SERVICE_PORT="${wizard_port:-2017}"
+
 # 选择核心类型
 # 优先级: 配置文件 > 环境变量 > 默认值(v2ray)
 CORE_TYPE="${CORE_TYPE:-v2ray}"
@@ -24,14 +28,14 @@ CORE_BIN="${TRIM_APPDEST}/${CORE_TYPE}/${CORE_TYPE}"
 CORE_ASSETSDIR="${TRIM_APPDEST}/${CORE_TYPE}"
 
 # v2rayA 启动命令
-# --address 0.0.0.0:${TRIM_SERVICE_PORT} 监听所有网卡
+# --address 0.0.0.0:${SERVICE_PORT} 监听所有网卡
 # --config ${TRIM_PKGVAR} 配置文件目录
 # --v2ray-bin ${CORE_BIN} 指定核心路径 (v2ray 或 xray)
 # --v2ray-assetsdir ${CORE_ASSETSDIR} 指定 geoip.dat 和 geosite.dat 所在目录
 # --log-file ${LOG_FILE} 日志文件路径，供 WebUI 读取
 # --log-level info 日志等级
 # --log-max-days 3 日志保留天数
-CMD="${TRIM_APPDEST}/v2raya --address 0.0.0.0:${TRIM_SERVICE_PORT} --config ${TRIM_PKGVAR} --v2ray-bin ${CORE_BIN} --v2ray-assetsdir ${CORE_ASSETSDIR} --log-file ${LOG_FILE} --log-level info --log-max-days 3"
+CMD="${TRIM_APPDEST}/v2raya --address 0.0.0.0:${SERVICE_PORT} --config ${TRIM_PKGVAR} --v2ray-bin ${CORE_BIN} --v2ray-assetsdir ${CORE_ASSETSDIR} --log-file ${LOG_FILE} --log-level info --log-max-days 3"
 
 log_msg() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> ${LOG_FILE}
