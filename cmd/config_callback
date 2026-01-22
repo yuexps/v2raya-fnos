@@ -3,16 +3,16 @@
 # This script is called after the user change environment variables in application setting page.
 # Update the core type selection
 
-# 获取用户选择的核心类型
+# 获取用户选择的核心类型和端口
 CORE_TYPE="${wizard_core_type:-v2ray}"
+PORT="${wizard_port:-2017}"
 
-# 创建环境变量配置文件
-ENV_CONFIG_DIR="${TRIM_PKGVAR}/env"
-mkdir -p "${ENV_CONFIG_DIR}"
+# 校验端口是否被占用
+if ss -tuln 2>/dev/null | grep -q ":${PORT} "; then
+    echo "Error: Port ${PORT} is already in use"
+    exit 1
+fi
 
-# 保存核心类型到配置文件
-echo "${CORE_TYPE}" > "${ENV_CONFIG_DIR}/CORE_TYPE"
-
-echo "Core type selection updated: ${CORE_TYPE}"
+echo "Configuration updated: Core type = ${CORE_TYPE}, Port = ${PORT}"
 
 exit 0
