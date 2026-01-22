@@ -212,7 +212,7 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         tag_name: v${{ steps.manifest.outputs.date }}-pre
-        name: v2rayA ${{ steps.v2raya.outputs.version }} (Pre-release)
+        name: v2rayA for fnOS ${{ steps.manifest.outputs.date }}
         body: |
           ## 🚀 Auto-built Pre-release
           
@@ -223,9 +223,6 @@ jobs:
           - v2ray-core: ${{ steps.v2ray.outputs.version }}
           - xray-core: ${{ steps.xray.outputs.version }}
           - Updated geoip.dat and geosite.dat files for both cores
-          
-          ### ⚠️ Notes
-          - This is a pre-release version. Please test and verify first.
           
           ### 📋 Upstream Release Notes
           - [v2rayA Release Notes](https://github.com/v2rayA/v2rayA/releases/tag/v${{ steps.v2raya.outputs.version }})
