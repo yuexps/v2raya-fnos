@@ -1,18 +1,5 @@
 #!/bin/bash
 
 # This script is called after the user completes the installation wizard.
-# Save the core type selection to environment configuration
-
-# 获取用户选择的核心类型和端口
-CORE_TYPE="${wizard_core_type:-v2ray}"
-PORT="${wizard_port:-2017}"
-
-# 校验端口是否被占用
-if ss -tuln 2>/dev/null | grep -q ":${PORT} "; then
-    echo "Error: Port ${PORT} is already in use"
-    exit 1
-fi
-
-echo "Installation configuration: Core type = ${CORE_TYPE}, Port = ${PORT}"
 
 exit 0

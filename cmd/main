@@ -9,14 +9,8 @@ PID_FILE="${TRIM_PKGVAR}/v2raya.pid"
 SERVICE_PORT="${wizard_port:-2017}"
 
 # 选择核心类型
-# 优先级: 配置文件 > 环境变量 > 默认值(v2ray)
-CORE_TYPE="${CORE_TYPE:-v2ray}"
-
-# 如果存在核心类型配置文件，从文件读取
-ENV_CONFIG_FILE="${TRIM_PKGVAR}/env/CORE_TYPE"
-if [ -f "${ENV_CONFIG_FILE}" ]; then
-    CORE_TYPE=$(cat "${ENV_CONFIG_FILE}" | tr -d '[:space:]')
-fi
+# 优先级: 环境变量 > 默认值(v2ray)
+CORE_TYPE="${wizard_core_type:-v2ray}"
 
 # 验证核心类型
 if [ "${CORE_TYPE}" != "v2ray" ] && [ "${CORE_TYPE}" != "xray" ]; then
