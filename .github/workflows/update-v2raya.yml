@@ -28,6 +28,9 @@ permissions:
   contents: write
   pull-requests: write
 
+env:
+  TZ: Asia/Shanghai
+
 jobs:
   check-and-update:
     runs-on: ubuntu-22.04
@@ -206,7 +209,7 @@ jobs:
       if: steps.check.outputs.needs_update == 'true' && (github.event_name == 'schedule' || github.event.inputs.create_release == 'true')
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: v${{ steps.v2raya.outputs.version }}-pre
+        tag_name: v$(date +%y.%-m.%-d)-pre
         name: v2rayA ${{ steps.v2raya.outputs.version }} (Pre-release)
         body: |
           ## 🚀 Auto-built Pre-release
