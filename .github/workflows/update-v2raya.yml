@@ -148,6 +148,7 @@ jobs:
         
     - name: Update manifest version
       if: steps.check.outputs.needs_update == 'true'
+      id: manifest
       run: |
         # 生成日期版本号 (YY.M.D)
         DATE_VERSION=$(date +%y.%-m.%-d)
@@ -157,6 +158,7 @@ jobs:
         sed -i "s/^version.*$/version         = ${DATE_VERSION}/" manifest
         sed -i "s/^changelog.*$/changelog       = Update to v2rayA ${V2RAYA_VERSION} with v2ray-core ${V2RAY_VERSION} and xray-core ${XRAY_VERSION}/" manifest
         
+        echo "date=$DATE_VERSION" >> $GITHUB_OUTPUT
         echo "Updated manifest version to ${DATE_VERSION}"
         
     - name: Update README
@@ -209,7 +211,7 @@ jobs:
       if: steps.check.outputs.needs_update == 'true' && (github.event_name == 'schedule' || github.event.inputs.create_release == 'true')
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: v$(date +%y.%-m.%-d)-pre
+        tag_name: v${{ steps.manifest.outputs.date }}-pre
         name: v2rayA ${{ steps.v2raya.outputs.version }} (Pre-release)
         body: |
           ## 🚀 Auto-built Pre-release
