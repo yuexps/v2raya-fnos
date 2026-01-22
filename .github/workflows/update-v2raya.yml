@@ -175,7 +175,7 @@ jobs:
       if: steps.check.outputs.needs_update == 'true' && (github.event_name == 'schedule' || github.event.inputs.create_release == 'true')
       run: |
         # 删除所有旧的 pre-release
-        gh release list --limit 100 | grep -i "pre-release" | awk '{print $3}' | while read tag; do
+        gh release list --limit 100 --json tagName,isPrerelease | jq -r '.[] | select(.isPrerelease == true) | .tagName' | while read tag; do
           echo "Deleting old pre-release: $tag"
           gh release delete "$tag" --yes || true
         done
