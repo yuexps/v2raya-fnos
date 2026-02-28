@@ -12,9 +12,9 @@ After installation, access the web interface via the fnOS desktop icon.
 
 ## Version Info
 
-- v2rayA Version: 2.2.7.4
+- v2rayA Version: 2.2.7.5
 - v2ray-core Version: 5.44.1
-- xray-core Version: 26.1.18
+- xray-core Version: 26.2.6
 - Architecture: x86_64
 
 ## Core Selection
