@@ -17,9 +17,9 @@ if [ "${CORE_TYPE}" != "v2ray" ] && [ "${CORE_TYPE}" != "xray" ]; then
     CORE_TYPE="v2ray"
 fi
 
-# 根据选择的核心类型设置二进制文件和资源目录
+# 根据选择的核心类型设置二进制文件，并统一设置资源目录
 CORE_BIN="${TRIM_APPDEST}/${CORE_TYPE}/${CORE_TYPE}"
-CORE_ASSETSDIR="${TRIM_APPDEST}/${CORE_TYPE}"
+CORE_ASSETSDIR="${TRIM_APPDEST}/geo"
 
 # v2rayA 启动命令
 # --address 0.0.0.0:${SERVICE_PORT} 监听所有网卡
@@ -38,12 +38,6 @@ log_msg() {
 start_process() {
     if status; then
         return 0
-    fi
-
-    # 校验端口是否被占用
-    if netstat -tuln 2>/dev/null | grep -q ":${SERVICE_PORT} "; then
-        echo "Error: Port ${SERVICE_PORT} is already in use" > "${TRIM_TEMP_LOGFILE}"
-        exit 1
     fi
 
     log_msg "Starting v2rayA process ..."

@@ -145,11 +145,8 @@ jobs:
         
         # 只保留需要的文件
         mv v2ray-temp/v2ray app/v2ray/v2ray
+        mv v2ray-temp/geosite.dat app/geo/geosite.dat
         chmod +x app/v2ray/v2ray
-        
-        # 更新 dat 文件
-        mv v2ray-temp/geoip.dat app/v2ray/geoip.dat
-        mv v2ray-temp/geosite.dat app/v2ray/geosite.dat
         
         # 清理临时文件
         rm -rf v2ray-temp v2ray.zip
@@ -166,14 +163,16 @@ jobs:
         
         # 只保留需要的文件
         mv xray-temp/xray app/xray/xray
+        mv xray-temp/geoip.dat app/geo/geoip.dat
         chmod +x app/xray/xray
-        
-        # 更新 dat 文件
-        mv xray-temp/geoip.dat app/xray/geoip.dat
-        mv xray-temp/geosite.dat app/xray/geosite.dat
         
         # 清理临时文件
         rm -rf xray-temp xray.zip
+    
+    - name: Download geosite.dat to LoyalsoldierSite.dat
+      if: steps.check.outputs.needs_update == 'true'
+      run: |
+        wget "https://github.com/v2rayA/dist-v2ray-rules-dat/raw/refs/heads/master/geosite.dat" -O app/geo/LoyalsoldierSite.dat
         
     - name: Update manifest version
       if: steps.check.outputs.needs_update == 'true'
