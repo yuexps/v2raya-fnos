@@ -41,22 +41,28 @@ jobs:
       
     - name: Get latest v2rayA version
       id: v2raya
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        LATEST=$(curl -s https://api.github.com/repos/v2rayA/v2rayA/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+        LATEST=$(curl -s -H "Authorization: token ${GH_TOKEN}" https://api.github.com/repos/v2rayA/v2rayA/releases/latest | jq -r '.tag_name' | sed 's/^v//')
         echo "version=$LATEST" >> $GITHUB_OUTPUT
         echo "Latest v2rayA version: $LATEST"
         
     - name: Get latest v2ray-core version
       id: v2ray
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        LATEST=$(curl -s https://api.github.com/repos/v2fly/v2ray-core/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+        LATEST=$(curl -s -H "Authorization: token ${GH_TOKEN}" https://api.github.com/repos/v2fly/v2ray-core/releases/latest | jq -r '.tag_name' | sed 's/^v//')
         echo "version=$LATEST" >> $GITHUB_OUTPUT
         echo "Latest v2ray-core version: $LATEST"
         
     - name: Get latest xray-core version
       id: xray
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        LATEST=$(curl -s https://api.github.com/repos/XTLS/Xray-core/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+        LATEST=$(curl -s -H "Authorization: token ${GH_TOKEN}" https://api.github.com/repos/XTLS/Xray-core/releases/latest | jq -r '.tag_name' | sed 's/^v//')
         echo "version=$LATEST" >> $GITHUB_OUTPUT
         echo "Latest xray-core version: $LATEST"
         
