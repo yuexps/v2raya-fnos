@@ -145,7 +145,6 @@ jobs:
         
         # 只保留需要的文件
         mv v2ray-temp/v2ray app/v2ray/v2ray
-        mv v2ray-temp/geosite.dat app/geo/geosite.dat
         chmod +x app/v2ray/v2ray
         
         # 清理临时文件
@@ -158,12 +157,10 @@ jobs:
         wget "https://github.com/XTLS/Xray-core/releases/download/v${VERSION}/Xray-linux-64.zip" -O xray.zip
         unzip -o xray.zip -d xray-temp
         
-        # 创建 xray 目录（如果不存在）
-        mkdir -p app/xray
-        
         # 只保留需要的文件
         mv xray-temp/xray app/xray/xray
         mv xray-temp/geoip.dat app/geo/geoip.dat
+        mv xray-temp/geosite.dat app/geo/geosite.dat
         chmod +x app/xray/xray
         
         # 清理临时文件
