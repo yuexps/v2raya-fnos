@@ -236,7 +236,7 @@ jobs:
       if: steps.check.outputs.needs_update == 'true'
       uses: actions/upload-artifact@v4
       with:
-        name: v2rayA-${{ steps.manifest.outputs.date }}.fpk
+        name: v2rayA-${{ steps.manifest.outputs.date }}
         path: ${{ steps.build.outputs.fpk_file }}
         retention-days: 30
         
