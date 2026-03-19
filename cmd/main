@@ -26,13 +26,6 @@ case "${ARCH}" in
     *)       error_exit "不支持的系统架构: ${ARCH}" ;;
 esac
 
-# 路径配置
-V2RAYA_BIN="${TRIM_APPDEST}/${ARCH}/v2raya"
-CORE_ASSETSDIR="${TRIM_APPDEST}/geo"
-
-# 检查二进制文件是否存在
-[ ! -f "${V2RAYA_BIN}" ] && error_exit "未找到 v2rayA 主程序: ${V2RAYA_BIN}"
-
 # 获取 Web 界面端口 (默认 2017)
 SERVICE_PORT="${wizard_port:-2017}"
 
@@ -43,6 +36,11 @@ CORE_TYPE="${wizard_core_type:-v2ray}"
 # 核心二进制路径
 CORE_BIN="${TRIM_APPDEST}/${ARCH}/${CORE_TYPE}/${CORE_TYPE}"
 [ ! -f "${CORE_BIN}" ] && error_exit "未找到核心程序: ${CORE_BIN}"
+
+# V2rayA 路径配置
+V2RAYA_BIN="${TRIM_APPDEST}/${ARCH}/v2raya"
+CORE_ASSETSDIR="${TRIM_APPDEST}/geo/${CORE_TYPE}"
+[ ! -f "${V2RAYA_BIN}" ] && error_exit "未找到 v2rayA 主程序: ${V2RAYA_BIN}"
 
 # v2rayA 启动参数
 CMD_ARGS="--address 0.0.0.0:${SERVICE_PORT} \
