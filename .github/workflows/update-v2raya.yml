@@ -1,0 +1,201 @@
+name: Update v2rayA, v2ray-core and xray-core
+
+on:
+  schedule:
+    # 每周五 UTC 2:00 (北京时间 10:00) 检查更新
+    - cron: '0 2 * * 5'
+  workflow_dispatch:
+    # 允许手动触发
+    inputs:
+      force:
+        description: '强制构建（忽略版本检查）'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+        - 'true'
+        - 'false'
+      create_release:
+        description: '是否发布 pre-release'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+        - 'true'
+        - 'false'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  TZ: Asia/Shanghai
+
+jobs:
+  check-and-update:
+    runs-on: ubuntu-22.04
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Get latest v2rayA version
+      id: v2raya
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        LATEST=$(curl -s -H "Authorization: token ${GH_TOKEN}" https://api.github.com/repos/v2rayA/v2rayA/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+        echo "version=$LATEST" >> $GITHUB_OUTPUT
+        echo "Latest v2rayA version: $LATEST"
+        
+    - name: Get current upstream versions
+      id: current
+      run: |
+        CHANGELOG=$(grep '^changelog' manifest | sed 's/^changelog.*= //')
+        
+        # 从 changelog 中提取版本号
+        # 格式: Update to v2rayA X.X.X
+        CURRENT_V2RAYA=$(echo "$CHANGELOG" | grep -oP 'v2rayA \K[^ ]+' || echo "")
+        
+        echo "v2raya=$CURRENT_V2RAYA" >> $GITHUB_OUTPUT
+        
+        echo "Current upstream versions from changelog:"
+        echo "  v2rayA: $CURRENT_V2RAYA"
+        
+    - name: Check if update needed
+      id: check
+      run: |
+        FORCE_UPDATE="${{ github.event.inputs.force || 'false' }}"
+        
+        V2RAYA_OLD="${{ steps.current.outputs.v2raya }}"
+        V2RAYA_NEW="${{ steps.v2raya.outputs.version }}"
+
+        # 构建更新详情
+        DETAIL=""
+        if [ "$V2RAYA_OLD" != "$V2RAYA_NEW" ] && [ -n "$V2RAYA_OLD" ]; then
+          DETAIL="${DETAIL}- v2rayA: ${V2RAYA_OLD} → ${V2RAYA_NEW}\n"
+        else
+          DETAIL="${DETAIL}- v2rayA: ${V2RAYA_NEW} (no change)\n"
+        fi
+
+        echo "update_details<<EOF" >> $GITHUB_OUTPUT
+        echo -e "$DETAIL" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+        if [ "$FORCE_UPDATE" = "true" ]; then
+          echo "needs_update=true" >> $GITHUB_OUTPUT
+          echo "Force update enabled"
+        elif [ "$V2RAYA_OLD" != "$V2RAYA_NEW" ] || \
+             [ "$V2RAY_OLD" != "$V2RAY_NEW" ] || \
+             [ "$XRAY_OLD" != "$XRAY_NEW" ]; then
+          echo "needs_update=true" >> $GITHUB_OUTPUT
+          echo "Update needed"
+        else
+          echo "needs_update=false" >> $GITHUB_OUTPUT
+          echo "No update needed (all components are up to date)"
+        fi
+        
+    - name: Download v2rayA And V2ray_Core binary
+      if: steps.check.outputs.needs_update == 'true'
+      run: |
+        VERSION="${{ steps.v2raya.outputs.version }}"
+        wget "https://github.com/v2rayA/v2rayA/releases/download/v${VERSION}/v2raya_linux_x64_${VERSION}" -O app/x86/v2raya
+        wget "https://github.com/v2rayA/v2rayA/releases/download/v${VERSION}/v2raya_linux_arm64_${VERSION}" -O app/arm/v2raya
+        wget "https://github.com/v2rayA/v2rayA/releases/download/v${VERSION}/v2raya_core_linux_x64_${VERSION}" -O app/x86/v2raya_core
+        wget "https://github.com/v2rayA/v2rayA/releases/download/v${VERSION}/v2raya_core_linux_arm64_${VERSION}" -O app/arm/v2raya_core
+        chmod +x app/x86/v2raya
+        chmod +x app/arm/v2raya
+    
+    - name: Download geoip.dat And geosite.dat to LoyalsoldierSite.dat
+      if: steps.check.outputs.needs_update == 'true'
+      run: |
+        wget "https://github.com/v2rayA/dist-v2ray-rules-dat/raw/refs/heads/master/geoip.dat" -O app/geo/geoip.dat
+        wget "https://github.com/v2rayA/dist-v2ray-rules-dat/raw/refs/heads/master/geosite.dat" -O app/geo/geosite.dat
+        wget "https://github.com/v2rayA/dist-v2ray-rules-dat/raw/refs/heads/master/geosite.dat" -O app/geo/LoyalsoldierSite.dat
+        
+    - name: Update manifest version
+      if: steps.check.outputs.needs_update == 'true'
+      id: manifest
+      run: |
+        # 生成日期版本号 (YY.M.D)
+        DATE_VERSION=$(date +%y.%-m.%-d)
+        V2RAYA_VERSION="${{ steps.v2raya.outputs.version }}"
+        sed -i "s/^version.*$/version         = ${DATE_VERSION}/" manifest
+        sed -i "s/^changelog.*$/changelog       = Update to v2rayA ${V2RAYA_VERSION}/" manifest
+        
+        echo "date=$DATE_VERSION" >> $GITHUB_OUTPUT
+        echo "Updated manifest version to ${DATE_VERSION}"
+        
+    - name: Update README
+      if: steps.check.outputs.needs_update == 'true'
+      run: |
+        V2RAYA_VERSION="${{ steps.v2raya.outputs.version }}"
+        
+        sed -i "s/- v2rayA Version: .*/- v2rayA Version: ${V2RAYA_VERSION}/" README.md
+        
+    - name: Install fnpack
+      if: steps.check.outputs.needs_update == 'true'
+      run: |
+        chmod +x build/fnpack-1.2.1-linux-amd64
+        sudo cp build/fnpack-1.2.1-linux-amd64 /usr/local/bin/fnpack
+        
+    - name: Build fpk package
+      if: steps.check.outputs.needs_update == 'true'
+      run: |
+        fnpack build
+        # 获取生成的 fpk 文件名
+        FPK_FILE=$(ls *.fpk | head -n 1)
+        echo "fpk_file=${FPK_FILE}" >> $GITHUB_OUTPUT
+        echo "FPK package built: ${FPK_FILE}"
+      id: build
+        
+    - name: Upload fpk artifact
+      if: steps.check.outputs.needs_update == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: v2rayA-${{ steps.manifest.outputs.date }}
+        path: ${{ steps.build.outputs.fpk_file }}
+        retention-days: 30
+        
+    - name: Delete old pre-releases
+      if: steps.check.outputs.needs_update == 'true' && (github.event_name == 'schedule' || github.event.inputs.create_release == 'true')
+      run: |
+        # 删除所有旧的 pre-release
+        gh release list --limit 100 --json tagName,isPrerelease | jq -r '.[] | select(.isPrerelease == true) | .tagName' | while read tag; do
+          echo "Deleting old pre-release: $tag"
+          gh release delete "$tag" --yes || true
+        done
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Create Pre-release
+      if: steps.check.outputs.needs_update == 'true' && (github.event_name == 'schedule' || github.event.inputs.create_release == 'true')
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v${{ steps.manifest.outputs.date }}-pre
+        name: v2rayA for fnOS ${{ steps.manifest.outputs.date }}
+        body: |
+          ## 🚀 Auto-built Pre-release
+          
+          This version is automatically built and published by GitHub Actions.
+          
+          ### 📦 Update Details
+          ${{ steps.check.outputs.update_details }}
+          - Updated geoip.dat and geosite.dat files for both cores
+          
+          ### 📋 Upstream Release Notes
+          - [v2rayA Release Notes](https://github.com/v2rayA/v2rayA/releases/tag/v${{ steps.v2raya.outputs.version }})
+        files: ${{ steps.build.outputs.fpk_file }}
+        prerelease: true
+        draft: false
+        
+    - name: Commit and push changes
+      if: steps.check.outputs.needs_update == 'true'
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        
+        git add app/ manifest README.md
+        
+        git diff --staged --quiet || git commit -m "chore: update to v2rayA ${{ steps.v2raya.outputs.version }}, v2ray-core ${{ steps.v2ray.outputs.version }} and xray-core ${{ steps.xray.outputs.version }}"
+        git push

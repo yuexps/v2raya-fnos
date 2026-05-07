@@ -1,0 +1,15 @@
+{
+    ".url": {
+        "v2raya.Application": {
+            "title": "v2rayA",
+            "icon": "images/icon_{0}.png",
+            "type": "url",
+            "protocol": "http",
+            "port": "${wizard_port}",
+            "url": "/",
+            "control": {
+                "accessPerm": "editable"
+            }
+        }
+    }
+}
