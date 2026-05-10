@@ -1,0 +1,13 @@
+{
+    ".url": {
+        "v2raya.Application": {
+            "title": "v2rayA",
+            "icon": "images/icon_{0}.png",
+            "type": "iframe",
+            "protocol": "",
+            "gatewaySocket": "v2raya.sock",
+            "gatewayPrefix": "/app/v2raya",
+            "url": "/app/v2raya/"
+        }
+    }
+}

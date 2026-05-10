@@ -1,0 +1,146 @@
+#!/bin/bash
+
+# 日志与 PID 文件位置
+LOG_FILE="${TRIM_PKGVAR}/v2raya.log"
+PID_FILE="${TRIM_PKGVAR}/v2raya.pid"
+
+# 日志函数
+log_msg() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "${LOG_FILE}"
+}
+
+# 错误处理并退出
+error_exit() {
+    log_msg "错误: $1"
+    if [ -n "${TRIM_TEMP_LOGFILE}" ]; then
+        echo "$1" > "${TRIM_TEMP_LOGFILE}"
+    fi
+    exit 1
+}
+
+# 获取系统架构
+ARCH=$(uname -m)
+case "${ARCH}" in
+    x86_64)  ARCH="x86" ;;
+    aarch64) ARCH="arm" ;;
+    *)       error_exit "不支持的系统架构: ${ARCH}" ;;
+esac
+
+# 获取核心类型 (默认 v2ray)
+CORE_TYPE="${wizard_core_type:-v2ray}"
+[[ "${CORE_TYPE}" != "v2ray" && "${CORE_TYPE}" != "xray" ]] && CORE_TYPE="v2ray"
+
+# 核心二进制路径
+CORE_BIN="${TRIM_APPDEST}/${ARCH}/${CORE_TYPE}/${CORE_TYPE}"
+[ ! -f "${CORE_BIN}" ] && error_exit "未找到核心程序: ${CORE_BIN}"
+
+# V2rayA 路径配置
+V2RAYA_BIN="${TRIM_APPDEST}/${ARCH}/v2raya-sock"
+CORE_ASSETSDIR="${TRIM_APPDEST}/geo/${CORE_TYPE}"
+[ ! -f "${V2RAYA_BIN}" ] && error_exit "未找到 v2rayA 主程序 (v2raya-sock): ${V2RAYA_BIN}"
+
+# SOCK 路径
+SOCK_FILE="${TRIM_APPDEST}/v2raya.sock"
+
+# 设置环境变量
+export V2RAYA_SOCKET="${SOCK_FILE}"
+export V2RAY_LOCATION_ASSET="${CORE_ASSETSDIR}"
+export XRAY_LOCATION_ASSET="${CORE_ASSETSDIR}"
+
+# v2rayA 启动参数 (使用 Unix Socket 模式，不再占用端口)
+CMD_ARGS="--config ${TRIM_PKGVAR} \
+--v2ray-bin ${CORE_BIN} \
+--v2ray-assetsdir ${CORE_ASSETSDIR} \
+--log-file ${LOG_FILE} \
+--log-level info \
+--log-max-days 3"
+
+# 获取 v2rayA 进程 PID
+get_v2raya_pid() {
+    pgrep -f "${V2RAYA_BIN}" | head -n 1
+}
+
+# 检查状态
+status() {
+    local pid=$(get_v2raya_pid)
+    if [ -n "${pid}" ]; then
+        echo "${pid}" > "${PID_FILE}"
+        return 0
+    fi
+    rm -f "${PID_FILE}"
+    return 1
+}
+
+# 启动进程
+start_process() {
+    if status; then
+        log_msg "v2rayA 已经在运行中"
+        return 0
+    fi
+
+    log_msg "正在启动 v2rayA ..."
+    # 确保清理旧 Socket
+    rm -f "${SOCK_FILE}"
+
+    # 后台运行
+    nohup "${V2RAYA_BIN}" ${CMD_ARGS} >> "${LOG_FILE}" 2>&1 &
+    
+    # 稍微等待确保进程启动
+    sleep 1
+
+    local new_pid=$(get_v2raya_pid)
+    if [ -n "${new_pid}" ]; then
+        echo "${new_pid}" > "${PID_FILE}"
+        log_msg "v2rayA 已启动 (Unix Socket)，PID: ${new_pid}"
+        return 0
+    else
+        error_exit "v2rayA 启动失败，请检查日志: ${LOG_FILE}"
+    fi
+}
+
+# 停止进程
+stop_process() {
+    log_msg "正在停止 v2rayA ..."
+    local v_pid=$(get_v2raya_pid)
+    
+    if [ -z "${v_pid}" ]; then
+        log_msg "未发现正在运行的进程"
+        rm -f "${PID_FILE}"
+        return 0
+    fi
+
+    # 尝试优雅关闭
+    kill -TERM "${v_pid}"
+    
+    local count=0
+    while [ $count -lt 10 ]; do
+        v_pid=$(get_v2raya_pid)
+        if [ -z "${v_pid}" ]; then
+            log_msg "v2rayA 已停止"
+            rm -f "${PID_FILE}"
+            rm -f "${SOCK_FILE}"
+            return 0
+        fi
+        sleep 1
+        ((count++))
+    done
+
+    # 如果仍有进程，强制关闭
+    v_pid=$(get_v2raya_pid)
+    if [ -n "${v_pid}" ]; then
+        log_msg "进程未响应，正在强制关闭 v2rayA (SIGKILL) PID: ${v_pid}"
+        kill -9 "${v_pid}"
+    fi
+    
+    rm -f "${PID_FILE}"
+    rm -f "${SOCK_FILE}"
+    return 0
+}
+
+case "$1" in
+    start)  start_process ;;
+    stop)   stop_process ;;
+    status) status && exit 0 || exit 3 ;;
+    *)      echo "Usage: $0 {start|stop|status}"; exit 1 ;;
+esac
+

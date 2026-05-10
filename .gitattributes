@@ -1,0 +1,9 @@
+# 强制所有文本文件使用 LF 换行符
+* text=auto eol=lf
+
+# 明确指定脚本文件
+fnpack/cmd/* text eol=lf
+fnpack/wizard/* text eol=lf
+*.sh text eol=lf
+*.go text eol=lf
+manifest text eol=lf

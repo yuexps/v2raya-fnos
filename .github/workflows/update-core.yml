@@ -1,0 +1,257 @@
+name: Update v2ray-core and xray-core
+
+on:
+  schedule:
+    # 每周五 UTC 2:00 (北京时间 10:00) 检查更新
+    - cron: '0 2 * * 5'
+  workflow_dispatch:
+    # 允许手动触发
+    inputs:
+      force:
+        description: '强制构建（忽略版本检查）'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+        - 'true'
+        - 'false'
+      create_release:
+        description: '是否发布 pre-release'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+        - 'true'
+        - 'false'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  TZ: Asia/Shanghai
+
+jobs:
+  check-and-update:
+    runs-on: ubuntu-22.04
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+        
+    - name: Get latest v2ray-core version
+      id: v2ray
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        LATEST=$(curl -s -H "Authorization: token ${GH_TOKEN}" https://api.github.com/repos/v2fly/v2ray-core/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+        echo "version=$LATEST" >> $GITHUB_OUTPUT
+        echo "Latest v2ray-core version: $LATEST"
+        
+    - name: Get latest xray-core version
+      id: xray
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        LATEST=$(curl -s -H "Authorization: token ${GH_TOKEN}" https://api.github.com/repos/XTLS/Xray-core/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+        echo "version=$LATEST" >> $GITHUB_OUTPUT
+        echo "Latest xray-core version: $LATEST"
+        
+    - name: Get current upstream versions
+      id: current
+      run: |
+        CHANGELOG=$(grep '^changelog' fnpack/manifest | sed 's/^changelog.*= //')
+        
+        # 从 changelog 中提取版本号
+        # 格式: Update to v2ray-core X.X.X and xray-core X.X.X
+        CURRENT_V2RAY=$(echo "$CHANGELOG" | grep -oP 'v2ray-core \K[^ ]+' || echo "")
+        CURRENT_XRAY=$(echo "$CHANGELOG" | grep -oP 'xray-core \K[^ ]+' || echo "")
+        
+        echo "v2ray=$CURRENT_V2RAY" >> $GITHUB_OUTPUT
+        echo "xray=$CURRENT_XRAY" >> $GITHUB_OUTPUT
+        
+        echo "Current upstream versions from changelog:"
+        echo "  v2ray-core: $CURRENT_V2RAY"
+        echo "  xray-core: $CURRENT_XRAY"
+        
+    - name: Check if update needed
+      id: check
+      run: |
+        FORCE_UPDATE="${{ github.event.inputs.force || 'false' }}"
+        
+        V2RAY_OLD="${{ steps.current.outputs.v2ray }}"
+        V2RAY_NEW="${{ steps.v2ray.outputs.version }}"
+        XRAY_OLD="${{ steps.current.outputs.xray }}"
+        XRAY_NEW="${{ steps.xray.outputs.version }}"
+
+        # 构建更新详情
+        if [ "$V2RAY_OLD" != "$V2RAY_NEW" ] && [ -n "$V2RAY_OLD" ]; then
+          DETAIL="${DETAIL}- v2ray-core: ${V2RAY_OLD} → ${V2RAY_NEW}\n"
+        else
+          DETAIL="${DETAIL}- v2ray-core: ${V2RAY_NEW} (no change)\n"
+        fi
+
+        if [ "$XRAY_OLD" != "$XRAY_NEW" ] && [ -n "$XRAY_OLD" ]; then
+          DETAIL="${DETAIL}- xray-core: ${XRAY_OLD} → ${XRAY_NEW}\n"
+        else
+          DETAIL="${DETAIL}- xray-core: ${XRAY_NEW} (no change)\n"
+        fi
+
+        echo "update_details<<EOF" >> $GITHUB_OUTPUT
+        echo -e "$DETAIL" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+        if [ "$FORCE_UPDATE" = "true" ]; then
+          echo "needs_update=true" >> $GITHUB_OUTPUT
+          echo "Force update enabled"
+        elif [ "$V2RAY_OLD" != "$V2RAY_NEW" ] || \
+             [ "$XRAY_OLD" != "$XRAY_NEW" ]; then
+          echo "needs_update=true" >> $GITHUB_OUTPUT
+          echo "Update needed"
+        else
+          echo "needs_update=false" >> $GITHUB_OUTPUT
+          echo "No update needed (all components are up to date)"
+        fi
+        
+    - name: Download v2ray-core
+      if: steps.check.outputs.needs_update == 'true'
+      run: |
+        VERSION="${{ steps.v2ray.outputs.version }}"
+        wget "https://github.com/v2fly/v2ray-core/releases/download/v${VERSION}/v2ray-linux-64.zip" -O v2ray_x86.zip
+        wget "https://github.com/v2fly/v2ray-core/releases/download/v${VERSION}/v2ray-linux-arm64-v8a.zip" -O v2ray_arm.zip
+        unzip -o v2ray_x86.zip -d v2ray-temp_x86
+        unzip -o v2ray_arm.zip -d v2ray-temp_arm
+        
+        # 只保留需要的文件
+        mv v2ray-temp_x86/v2ray fnpack/app/x86/v2ray/v2ray
+        mv v2ray-temp_arm/v2ray fnpack/app/arm/v2ray/v2ray
+        mv v2ray-temp_x86/geoip.dat fnpack/app/geo/v2ray/geoip.dat
+        mv v2ray-temp_x86/geosite.dat fnpack/app/geo/v2ray/geosite.dat
+        chmod +x fnpack/app/x86/v2ray/v2ray
+        chmod +x fnpack/app/arm/v2ray/v2ray
+        
+        # 清理临时文件
+        rm -rf v2ray-temp_x86 v2ray-temp_arm v2ray_x86.zip v2ray_arm.zip
+        
+    - name: Download xray-core
+      if: steps.check.outputs.needs_update == 'true'
+      run: |
+        VERSION="${{ steps.xray.outputs.version }}"
+        wget "https://github.com/XTLS/Xray-core/releases/download/v${VERSION}/Xray-linux-64.zip" -O xray_x86.zip
+        wget "https://github.com/XTLS/Xray-core/releases/download/v${VERSION}/Xray-linux-arm64-v8a.zip" -O xray_arm.zip
+        unzip -o xray_x86.zip -d xray-temp_x86
+        unzip -o xray_arm.zip -d xray-temp_arm
+        
+        # 只保留需要的文件
+        mv xray-temp_x86/xray fnpack/app/x86/xray/xray
+        mv xray-temp_arm/xray fnpack/app/arm/xray/xray
+        mv xray-temp_x86/geoip.dat fnpack/app/geo/xray/geoip.dat
+        mv xray-temp_x86/geosite.dat fnpack/app/geo/xray/geosite.dat
+        chmod +x fnpack/app/x86/xray/xray
+        chmod +x fnpack/app/arm/xray/xray
+        
+        # 清理临时文件
+        rm -rf xray-temp_x86 xray-temp_arm xray_x86.zip xray_arm.zip
+    
+    - name: Download geosite.dat to LoyalsoldierSite.dat
+      if: steps.check.outputs.needs_update == 'true'
+      run: |
+        wget "https://github.com/v2rayA/dist-v2ray-rules-dat/raw/refs/heads/master/geosite.dat" -O fnpack/app/geo/xray/LoyalsoldierSite.dat
+        cp fnpack/app/geo/xray/LoyalsoldierSite.dat fnpack/app/geo/v2ray/LoyalsoldierSite.dat
+        
+    - name: Update manifest version
+      if: steps.check.outputs.needs_update == 'true'
+      id: manifest
+      run: |
+        # 生成日期版本号 (YY.M.D)
+        DATE_VERSION=$(date +%y.%-m.%-d)
+        V2RAYA_VERSION="2.2.7.5"
+        V2RAY_VERSION="${{ steps.v2ray.outputs.version }}"
+        XRAY_VERSION="${{ steps.xray.outputs.version }}"
+        sed -i "s/^version.*$/version         = ${DATE_VERSION}/" fnpack/manifest
+        sed -i "s/^changelog.*$/changelog       = Update to v2ray-core ${V2RAY_VERSION} and xray-core ${XRAY_VERSION}/" fnpack/manifest
+        
+        echo "date=$DATE_VERSION" >> $GITHUB_OUTPUT
+        echo "Updated manifest version to ${DATE_VERSION}"
+        
+    - name: Update README
+      if: steps.check.outputs.needs_update == 'true'
+      run: |
+        V2RAYA_VERSION="2.2.7.5"
+        V2RAY_VERSION="${{ steps.v2ray.outputs.version }}"
+        XRAY_VERSION="${{ steps.xray.outputs.version }}"
+        
+        sed -i "s/- v2rayA Version: .*/- v2rayA Version: ${V2RAYA_VERSION}/" README.md
+        sed -i "s/- v2ray-core Version: .*/- v2ray-core Version: ${V2RAY_VERSION}/" README.md
+        sed -i "s/- xray-core Version: .*/- xray-core Version: ${XRAY_VERSION}/" README.md
+        
+    - name: Install fnpack
+      if: steps.check.outputs.needs_update == 'true'
+      run: |
+        chmod +x fnpack/fnpack-1.2.1-linux-amd64
+        sudo cp fnpack/fnpack-1.2.1-linux-amd64 /usr/local/bin/fnpack
+        
+    - name: Build fpk package
+      if: steps.check.outputs.needs_update == 'true'
+      run: |
+        cd fnpack
+        fnpack build
+        # 获取生成的 fpk 文件名
+        FPK_FILE=$(ls *.fpk | head -n 1)
+        echo "fpk_file=fnpack/${FPK_FILE}" >> $GITHUB_OUTPUT
+        echo "FPK package built: ${FPK_FILE}"
+      id: build
+        
+    - name: Upload fpk artifact
+      if: steps.check.outputs.needs_update == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: v2rayA-${{ steps.manifest.outputs.date }}
+        path: ${{ steps.build.outputs.fpk_file }}
+        retention-days: 30
+        
+    - name: Delete old pre-releases
+      if: steps.check.outputs.needs_update == 'true' && (github.event_name == 'schedule' || github.event.inputs.create_release == 'true')
+      run: |
+        # 删除所有旧的 pre-release
+        gh release list --limit 100 --json tagName,isPrerelease | jq -r '.[] | select(.isPrerelease == true) | .tagName' | while read tag; do
+          echo "Deleting old pre-release: $tag"
+          gh release delete "$tag" --yes || true
+        done
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Create Pre-release
+      if: steps.check.outputs.needs_update == 'true' && (github.event_name == 'schedule' || github.event.inputs.create_release == 'true')
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v${{ steps.manifest.outputs.date }}-pre
+        name: v2rayA for fnOS ${{ steps.manifest.outputs.date }}
+        body: |
+          ## 🚀 Auto-built Pre-release
+          
+          This version is automatically built and published by GitHub Actions.
+          
+          ### 📦 Update Details
+          ${{ steps.check.outputs.update_details }}
+          - Updated geoip.dat and geosite.dat files for both cores
+          
+          ### 📋 Upstream Release Notes
+          - [v2ray-core Release Notes](https://github.com/v2fly/v2ray-core/releases/tag/v${{ steps.v2ray.outputs.version }})
+          - [xray-core Release Notes](https://github.com/XTLS/Xray-core/releases/tag/v${{ steps.xray.outputs.version }})
+        files: ${{ steps.build.outputs.fpk_file }}
+        prerelease: true
+        draft: false
+        
+    - name: Commit and push changes
+      if: steps.check.outputs.needs_update == 'true'
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        
+        git add fnpack/ README.md
+        
+        V2RAY_VERSION="${{ steps.v2ray.outputs.version }}"
+        XRAY_VERSION="${{ steps.xray.outputs.version }}"
+        git diff --staged --quiet || git commit -m "chore: update to v2ray-core ${V2RAY_VERSION} and xray-core ${XRAY_VERSION}"
+        git push
