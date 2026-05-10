@@ -226,7 +226,10 @@ export default {
       }
     },
     handleClickSubmit() {
-      if (!this.$refs.backendAddress.checkHtml5Validity()) {
+      if (
+        this.$refs.backendAddress &&
+        !this.$refs.backendAddress.checkHtml5Validity()
+      ) {
         return;
       }
       //去除末位'/'
@@ -237,7 +240,7 @@ export default {
       //当前服务端是否正常工作
       if (this.backendReady && !this.addressChanged) {
         this.$axios({
-          url: backendAddress + "/api/ports",
+          url: backendAddress + "/app/v2raya/api/ports",
           method: "put",
           data: {
             socks5: parseInt(this.table.socks5),
@@ -270,7 +273,7 @@ export default {
         });
       } else {
         this.$axios({
-          url: backendAddress + "/api/version",
+          url: backendAddress + "/app/v2raya/api/version",
         }).then(() => {
           localStorage["backendAddress"] = backendAddress;
           this.$emit("close");

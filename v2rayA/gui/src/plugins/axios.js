@@ -169,7 +169,7 @@ axios.interceptors.response.use(
       });
     } else if (
       (err.message && err.message === "Network Error") ||
-      (err.config && err.config.url === "/api/version")
+      (err.config && err.config.url && err.config.url.endsWith("/api/version"))
     ) {
       informNotRunning(u.source.replace(u.relative, ""));
     } else {

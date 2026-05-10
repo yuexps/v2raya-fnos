@@ -429,17 +429,19 @@ export default {
       );
     },
     handleClickSubmit() {
-      if (this.muxOn === "yes" && !this.$refs.muxinput.checkHtml5Validity()) {
+      if (this.muxOn === "yes" && this.$refs.muxinput && !this.$refs.muxinput.checkHtml5Validity()) {
         return;
       }
       if (
         this.subscriptionAutoUpdateMode === "auto_update_at_intervals" &&
+        this.$refs.autoUpdateSubInput &&
         !this.$refs.autoUpdateSubInput.checkHtml5Validity()
       ) {
         return;
       }
       if (
         this.pacAutoUpdateMode === "auto_update_at_intervals" &&
+        this.$refs.autoUpdatePacInput &&
         !this.$refs.autoUpdatePacInput.checkHtml5Validity()
       ) {
         return;

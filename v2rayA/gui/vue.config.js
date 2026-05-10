@@ -37,7 +37,7 @@ module.exports = {
       },
       plugins: [
         new webpack.DefinePlugin({
-          'apiRoot': '`${localStorage["backendAddress"] ? (localStorage["backendAddress"].endsWith("/") ? localStorage["backendAddress"].slice(0, -1) : localStorage["backendAddress"]) + "/api" : "/app/v2raya/api"}`',
+          'apiRoot': '`${(localStorage["backendAddress"] ? (localStorage["backendAddress"].endsWith("/") ? localStorage["backendAddress"].slice(0, -1) : localStorage["backendAddress"]) : "") + "/app/v2raya/api"}`',
         }),
         new WebpackIconfontPluginNodejs({
           cssPrefix: "icon",
