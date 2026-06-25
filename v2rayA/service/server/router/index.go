@@ -58,23 +58,25 @@ func cachedHTML(html []byte) func(ctx *gin.Context) {
 }
 
 func ServeGUI(r gin.IRoutes) {
-	// 获取当前路由组的前缀
 	prefix := ""
 	if group, ok := r.(*gin.RouterGroup); ok {
 		prefix = group.BasePath()
 	}
-
 	webDir := conf.GetEnvironmentConfig().WebDir
 	if webDir == "" {
 		webFS, err := fs.Sub(webRoot, "web")
 		if err != nil {
 			log.Fatal("fs.Sub: %v", err)
 		}
-		// 动态适配前缀
-		staticPrefix := filepath.Join(prefix, "static")
-		staticPrefix = strings.ReplaceAll(staticPrefix, "\\", "/")
-		
-		ss := http.StripPrefix(staticPrefix, statigz.FileServer(webFS.(fs.ReadDirFS)))
+		staticFS := webFS.(fs.ReadDirFS)
+		if sub, subErr := fs.Sub(webFS, "static"); subErr == nil {
+			staticFS = sub.(fs.ReadDirFS)
+		}
+		staticPrefix := filepath.ToSlash(filepath.Join(prefix, "static"))
+		if !strings.HasPrefix(staticPrefix, "/") {
+			staticPrefix = "/" + staticPrefix
+		}
+		ss := http.StripPrefix(staticPrefix, statigz.FileServer(staticFS))
 		r.GET("/static/*w", func(c *gin.Context) {
 			ss.ServeHTTP(c.Writer, c.Request)
 		})
@@ -87,23 +89,25 @@ func ServeGUI(r gin.IRoutes) {
 		if err != nil {
 			log.Fatal("ReadAll index.html: %v", err)
 		}
-		// 匹配组根路径
 		r.GET("/", cachedHTML(html))
+		if favicon, favErr := webFS.Open("favicon.ico"); favErr == nil {
+			defer favicon.Close()
+			favData, _ := io.ReadAll(favicon)
+			r.GET("/favicon.ico", func(c *gin.Context) {
+				c.Data(http.StatusOK, "image/x-icon", favData)
+			})
+		}
 	} else {
 		if _, err := os.Stat(webDir); os.IsNotExist(err) {
 			log.Warn("web files cannot be found at %v. web UI cannot be served", webDir)
 		} else {
-			filepath.Walk(webDir, func(path string, info os.FileInfo, err error) error {
-				if path == webDir {
-					return nil
-				}
-				if info.IsDir() {
-					r.Static("/static/"+info.Name(), path)
-					return filepath.SkipDir
-				}
-				r.StaticFile("/static/"+info.Name(), path)
-				return nil
-			})
+			staticDir := filepath.Join(webDir, "static")
+			if info, statErr := os.Stat(staticDir); statErr == nil && info.IsDir() {
+				r.Static("/static", staticDir)
+			} else {
+				// Backward-compatible fallback for legacy builds that emit hashed assets at web root.
+				r.Static("/static", webDir)
+			}
 
 			f, err := os.Open(filepath.Join(webDir, "index.html"))
 			if err != nil {
@@ -115,7 +119,25 @@ func ServeGUI(r gin.IRoutes) {
 				log.Fatal("ReadAll index.html: %v", err)
 			}
 			r.GET("/", cachedHTML(html))
+			favPath := filepath.Join(webDir, "favicon.ico")
+			if _, favErr := os.Stat(favPath); favErr == nil {
+				r.StaticFile("/favicon.ico", favPath)
+			}
 		}
+	}
+
+	app := conf.GetEnvironmentConfig()
+
+	ip, port, _ := net.SplitHostPort(app.Address)
+	addrs, err := net.InterfaceAddrs()
+	if net.ParseIP(ip).IsUnspecified() && err == nil {
+		for _, addr := range addrs {
+			if ipnet, ok := addr.(*net.IPNet); ok {
+				printRunningAt("http://" + net.JoinHostPort(ipnet.IP.String(), port))
+			}
+		}
+	} else {
+		printRunningAt("http://" + app.Address)
 	}
 }
 
@@ -126,8 +148,8 @@ func nocache(c *gin.Context) {
 }
 
 func Run() error {
-	app := conf.GetEnvironmentConfig()
 	engine := gin.New()
+	//ginpprof.Wrap(engine)
 	engine.Use(gin.Recovery())
 	corsConfig := cors.DefaultConfig()
 	corsConfig.AllowAllOrigins = true
@@ -137,11 +159,14 @@ func Run() error {
 	corsConfig.AllowWebSockets = true
 	corsConfig.AllowCredentials = true
 	corsConfig.AddAllowHeaders("Authorization", common.RequestIdHeader)
+	corsConfig.AddExposeHeaders("Content-Disposition")
 	engine.Use(cors.New(corsConfig))
-
-	// 为飞牛 NAS 增加根路由组
-	root := engine.Group("/app/v2raya")
-
+	app := conf.GetEnvironmentConfig()
+	rootPath := app.BaseUrl
+	if rootPath == "" {
+		rootPath = "/"
+	}
+	root := engine.Group(rootPath)
 	noAuth := root.Group("api",
 		nocache,
 		reqCache.ReqCache,
@@ -149,6 +174,7 @@ func Run() error {
 	{
 		noAuth.GET("version", controller.GetVersion)
 		noAuth.POST("login", controller.PostLogin)
+		noAuth.GET("account", controller.GetAccount)
 		noAuth.POST("account", controller.PostAccount)
 	}
 	auth := root.Group("api",
@@ -185,15 +211,19 @@ func Run() error {
 		auth.PATCH("subscription", controller.PatchSubscription)
 		auth.GET("ports", controller.GetPorts)
 		auth.PUT("ports", controller.PutPorts)
+		auth.GET("customInbound", controller.GetCustomInbound)
+		auth.POST("customInbound", controller.PostCustomInbound)
+		auth.DELETE("customInbound", controller.DeleteCustomInbound)
 		//auth.PUT("account", controller.PutAccount)
-		auth.GET("dnsList", controller.GetDnsList)
-		auth.PUT("dnsList", controller.PutDnsList)
+		auth.GET("dnsRules", controller.GetDnsRules)
+		auth.PUT("dnsRules", controller.PutDnsRules)
 		auth.GET("routingA", controller.GetRoutingA)
 		auth.PUT("routingA", controller.PutRoutingA)
 		auth.GET("outbounds", controller.GetOutbounds)
 		auth.GET("outbound", controller.GetOutbound)
 		auth.POST("outbound", controller.PostOutbound)
 		auth.PUT("outbound", controller.PutOutbound)
+		auth.PUT("outboundConnections", controller.PutOutboundConnections)
 		auth.DELETE("outbound", controller.DeleteOutbound)
 		auth.GET("message", controller.WsMessage)
 		auth.GET("logger", controller.GetLogger)
@@ -201,38 +231,23 @@ func Run() error {
 		auth.GET("tproxyWhiteIpGroups", controller.GetTproxyWhiteIpGroups)
 		auth.PUT("domainsExcluded", controller.PutDomainsExcluded)
 		auth.PUT("tproxyWhiteIpGroups", controller.PutTproxyWhiteIpGroups)
+		auth.GET("networkInterfaces", controller.GetNetworkInterfaces)
 	}
 
-	// 将 GUI 路由也挂载在 root 下
 	ServeGUI(root)
 
-	// 处理监听
 	if app.Socket != "" {
-		// 删除旧的 Socket 文件
 		_ = os.Remove(app.Socket)
 		listener, err := net.Listen("unix", app.Socket)
 		if err != nil {
 			return err
 		}
-		// 设置权限确保网关可读写
 		_ = os.Chmod(app.Socket, 0777)
 		log.Alert("v2rayA is listening at unix:%v", app.Socket)
 		return http.Serve(listener, engine)
 	}
 
-	ip, port, _ := net.SplitHostPort(app.Address)
-	addrs, err := net.InterfaceAddrs()
-	if net.ParseIP(ip).IsUnspecified() && err == nil {
-		for _, addr := range addrs {
-			if ipnet, ok := addr.(*net.IPNet); ok {
-				printRunningAt("http://" + net.JoinHostPort(ipnet.IP.String(), port))
-			}
-		}
-	} else {
-		printRunningAt("http://" + app.Address)
-	}
-
-	return engine.Run(app.Address)
+	return engine.Run(conf.GetEnvironmentConfig().Address)
 }
 
 func printRunningAt(address string) {

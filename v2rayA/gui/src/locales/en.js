@@ -1,6 +1,6 @@
 export default {
   common: {
-    outboundSetting: "Outbound Setting",
+    outboundSetting: "Proxy Group Setting",
     setting: "Setting",
     about: "About",
     loggedAs: "Logged as <b>{username}</b>",
@@ -13,11 +13,16 @@ export default {
     local: "Local",
     success: "SUCCESS",
     fail: "FAIL",
+    empty: "No nodes added",
     message: "Message",
     none: "none",
     optional: "optional",
     loadBalance: "Load Balance",
     log: "Logs",
+    proxyGroups: "Proxy Groups",
+    darkTheme: "Dark Theme",
+    lightTheme: "Light Theme",
+    autoTheme: "Auto Theme",
   },
   welcome: {
     title: "Welcome",
@@ -78,6 +83,9 @@ export default {
     connect: "Connect",
     disconnect: "Disconnect",
     select: "Select",
+    addTo: "Add to",
+    addToProxyGroup: "Add to group {group}",
+    removeFromProxyGroup: "Remove from group {group}",
     login: "Login",
     logout: "Logout",
     configure: "Configure",
@@ -87,12 +95,19 @@ export default {
     confirm2: "Carefully confirmed",
     save: "Save",
     copyLink: "COPY LINK",
+    export: "Export",
+    copySelected: "Copy selected nodes",
+    downloadTxt: "Download TXT file",
     helpManual: "Help & Manual",
     yes: "Yes",
     no: "No",
     switchSite: "Switch to alternate site",
-    addOutbound: "Add an outbound",
-    domainsExcluded: "Domains Excluded"
+    addOutbound: "Add a proxy group",
+    add: "Add",
+    close: "Close",
+    domainsExcluded: "Domains Excluded",
+    tproxyExcludedInterfaces: "Excluded Interface Prefixes",
+    configureTunRouteScript: "Configure Route Script",
   },
   register: {
     title: "Create an admin account first",
@@ -110,18 +125,33 @@ export default {
   setting: {
     transparentProxy: "Transparent Proxy/System Proxy",
     transparentType: "Transparent Proxy/System Proxy Implementation",
+    logLevel: "Log Level",
     pacMode: "Traffic Splitting Mode of Rule Port",
-    preventDnsSpoofing: "Prevent DNS Spoofing",
-    specialMode: "Special Mode",
     mux: "Multiplex",
     autoUpdateSub: "Automatically Update Subscriptions",
     autoUpdateGfwlist: "Automatically Update GFWList",
     preferModeWhenUpdate: "Mode when Update Subscriptions and GFWList",
+    tproxyExcludedInterfaces: "Excluded Interface Prefixes",
+    tunAutoRoute: "Auto Route",
+    tunBypassInterfaces: "TUN Bypassed Interfaces",
+    tunBypassCustomPlaceholder: "Custom glob patterns, e.g. docker*, vmnet*",
+    tunBypassSelectPlaceholder: "Select interfaces...",
+    tunBypassSelected: "{n} interface(s) selected",
     ipForwardOn: "IP Forward",
     portSharingOn: "Port Sharing",
     concurrency: "Concurrency",
     inboundSniffing: "Sniffing",
+    tunProcessBackend: "Process Exclusion Backend",
+    tunExcludeProcesses: "TinyTun Excluded Processes",
+    ssBackend: "Shadowsocks Backend",
+    trojanBackend: "Trojan Backend",
+    nodeBackend: "Backend",
     options: {
+      trace: "Trace",
+      debug: "Debug",
+      info: "Info",
+      warn: "Warn",
+      error: "Error",
       global: "Do not Split Traffic",
       direct: "Direct",
       pac: "Depend on Rule Port",
@@ -129,12 +159,10 @@ export default {
       gfwlist: "Proxy only GFWList",
       sameAsPacMode: "Traffic Splitting Mode is the Same as the Rule Port",
       customRouting: "Customized Routing",
-      antiDnsHijack: "Prevent DNS Hijack Only (fast)",
-      forwardDnsRequest: "Forward DNS Request",
-      doh: "DoH(dns-over-https)",
       default: "Keep Default",
       on: "On",
       off: "Off",
+      notIntegrated: "not integrated",
       updateSubWhenStart: "Update Subscriptions When Service Starts",
       updateSubAtIntervals: "Update Subscriptions Regularly (Unit: hour)",
       updateGfwlistWhenStart: "Update GFWList When Service Starts",
@@ -143,6 +171,10 @@ export default {
       closed: "Off",
       advanced: "Advanced Setting",
       leastPing: "Least Latency First",
+      tunBackendTun: "TUN (default, /proc process lookup)",
+      tunBackendEbpf: "eBPF (cgroupv2 process exclusion)",
+      backendV2ray: "v2ray / xray",
+      backendSystemDefault: "System Default",
     },
     messages: {
       inboundSniffing: "Sniff inbound traffic. If it is not turned on, some traffic may not be diverted correctly.",
@@ -151,13 +183,16 @@ export default {
       transparentProxy:
         "If transparent proxy on, no extra configure needed and all TCP traffic will pass through the v2rayA. Providing proxy service to other computers and docker as the gateway should make option 'Share in LAN' on.",
       transparentType:
-        "★tproxy: support UDP, but not support docker. ★redirect: friendly for docker, but does not support UDP and need to occupy local port 53 for dns anti-pollution.",
+        "★tproxy: support UDP, but not support docker. ★redirect: friendly for docker, but does not support UDP and need to occupy local port 53 for dns anti-pollution. ★tun (TinyTun): cross-platform TUN-based proxy, requires tinytun binary; on Linux the data path is handled by TinyTun itself, so the generated YAML must match the TinyTun version.",
+      tproxyExcludedInterfaces:
+        "Set the network interface prefixes that should not pass through the transparent proxy. Wildcard * is supported (automatically converted to + in iptables mode). For example: docker*, veth*, wg*, ppp*, br-*. Use commas to separate multiple prefixes.",
+      tunAutoRoute:
+        "When enabled, TinyTun automatically configures system routes. When disabled, you must provide custom setup/teardown scripts to configure routing yourself.",
+      tunBypassInterfaces: "Select interfaces to exclude from TUN proxying, or enter custom glob patterns below.",
+      tunProcessBackend: "Choose TinyTun's process exclusion method on Linux. TUN mode uses /proc scanning for broad compatibility; eBPF mode uses cgroupv2 hooks for more accurate process-level exclusion, requiring tinytun-ebpf.o at /usr/lib/tinytun/.",
+      tunExcludeProcesses: "Configure additional process names to bypass TinyTun. One name per line is recommended, e.g. chrome.exe or firefox.",
       pacMode: `Here you can set the splitting traffic rule of the rule port. By default, "Rule of Splitting Traffic" port is 20172 and HTTP protocol.`,
-      preventDnsSpoofing:
-        "★Forward DNS Request: DNS requests will be forwarded by proxy server." +
-        "★DoH(dns-over-https, v2ray-core: 4.22.0+): DNS over HTTPS.",
-      specialMode:
-        "★supervisor：Monitor dns pollution, intercept in advance, use the sniffing mechanism of v2ray-core to prevent pollution. ★fakedns：Use the fakens strategy to speed up the resolving.",
+      preventDnsSpoofing: "",
       tcpFastOpen:
         "Simplify TCP handshake process to speed up connection establishment. Risk of emphasizing characteristics of packets exists. It may cause failed to connect if your system does not support it.",
       mux:
@@ -186,7 +221,7 @@ export default {
     portApi: "Port of api (0 for random)",
     apiServices: "Enabled api service",
     messages: [
-      "Service address default as 0.0.0.0:2017 can be changed by setting environment variable <code>V2RAYA_ADDRESS</code> and command argument<code>--address</code>.",
+      "On FN-OS, the service address is automatically configured by system and editing is disabled.",
       "If you start v2raya docker container with port mapping instead of <code>--network host</code>, you can remapping ports in this way.",
       "We cannot judge port occupations in docker mode. Confirm it by yourself.",
       "Zero means to close this port.",
@@ -225,13 +260,17 @@ export default {
     ],
   },
   dns: {
-    title: "Configure DNS Server",
-    internalQueryServers: "Domain Query Servers",
-    externalQueryServers: "External Domain Query Servers",
-    messages: [
-      '"@:(dns.internalQueryServers)" are designed to be used to look up domain names in China, while "@:(dns.externalQueryServers)" be used to look up others.',
-      '"@:(dns.internalQueryServers)" will be used to look up all domain names if "@:(dns.externalQueryServers)" is empty.',
-    ],
+    title: "DNS Settings",
+    help: "DNS Help",
+    helpTooltip: "View v2fly DNS documentation",
+    colServer: "DNS Server",
+    colDomains: "Domain List",
+    colOutbound: "Outbound",
+    serverPlaceholder: "e.g. 8.8.8.8 or https://dns.google/dns-query",
+    domainsPlaceholder: "One per line, e.g. geosite:cn\nLeave empty for fallback DNS",
+    addRule: "Add Rule",
+    resetDefault: "Reset to Defaults",
+    errNoRules: "At least one DNS rule is required",
   },
   egressPortWhitelist: {
     title: "Egress Port Whitelist",
@@ -264,6 +303,25 @@ export default {
     password: "Password",
     origin: "origin",
     pinnedCertchainSha256: "pinned certificate chain sha256",
+    maxEarlyData: "Max Early Data",
+    earlyDataHeaderName: "Early Data Header Name",
+    multiMode: "MultiMode",
+    idleTimeout: "Idle Timeout",
+    healthCheckTimeout: "Health Check Timeout",
+    permitWithoutStream: "Permit Without Stream",
+    initialWindowsSize: "Initial Windows Size",
+    wireguardName: "Name",
+    wireguardAddress: "Address",
+    wireguardPort: "Port",
+    wireguardPublicKey: "Public Key",
+    wireguardPrivateKey: "Private Key",
+    wireguardLocalAddress: "Address (Local)",
+    wireguardDns: "DNS",
+    wireguardMtu: "MTU",
+    wireguardAllowedIPs: "Allowed IPs",
+    wireguardPersistentKeepalive: "Persistent Keepalive",
+    wireguardPreSharedKey: "Pre-shared Key",
+    wireguardEndpoint: "Endpoint",
   },
   configureSubscription: {
     title: "Configure Subscription",
@@ -289,15 +347,14 @@ export default {
       "geosite.dat, geoip.dat or v2ray-core may not be installed correctly",
     v2rayNotV5:
       "The version of v2ray-core is not v5. Use v5 or downgrade v2rayA to v1.5",
+    coreVersionMismatch:
+      "Core version mismatch: v2raya_core version must exactly match v2rayA version. {err}",
   },
-  about: `<p>v2rayA is a web GUI client of V2Ray.</p>
-          <p class="about-small">Default ports:</p>
-          <p class="about-small">2017: v2rayA service port</p>
-          <p class="about-small">20170: SOCKS protocol</p>
-          <p class="about-small">20171: HTTP protocol</p>
-          <p class="about-small">20172: HTTP protocol with "Rule of Splitting Traffic"</p>
-          <p class="about-small">Other ports：</p>
-          <p class="about-small">32345: tproxy, needed by transparent proxy </p>
+  about: `<p>v2rayA is a web GUI client of V2Ray/Xray.</p>
+          <p class="about-small"><b>FN-OS Dedicated Version (Linux x86_64 / aarch64)</b></p>
+          <p class="about-small">This version is deeply integrated with FN-OS, communicating with the backend via Unix Domain Socket to ensure zero TCP port occupation for the management interface.</p>
+          <p class="about-small"><b>Default Port:</b></p>
+          <p class="about-small">20172: Mixed/Splitting proxy port (Only this port is enabled by default to prevent conflicts)</p>
           <p>All data is stored in local instead of in the cloud. </p>
           <p>Problems found during use can be reported at <a href="https://github.com/v2rayA/v2rayA/issues">issues</a>.</p>
           <p>Documentation: <a href="https://v2raya.org">https://v2raya.org</a></p>`,
@@ -319,15 +376,36 @@ export default {
     messages: ["click the button 'Help&Manual' for help"],
   },
   outbound: {
-    addMessage: "Please input the outbound name you want to add:",
+    addMessage: "Please input the proxy group name you want to add:",
     deleteMessage:
       'Be sure to <b>DELETE</b> the outbound "{outboundName}"? It is not reversible.',
   },
+  proxyGroup: {
+    pickTitle: "Add to Proxy Group",
+    pickMessage: "Choose the proxy group this node should join.",
+    group: "Proxy Group",
+  },
   log: {
     logModalTitle: "View logs",
+    logsLabel: "Logs",
     refreshInterval: "Refresh Interval",
     seconds: "seconds",
     autoScoll: "Auto Scroll",
+    autoShowNew: "Auto Show New Logs",
+    category: "Category",
+    source: "Log Source",
+    categories: {
+      all: "All",
+      error: "Error",
+      warn: "Warn",
+      info: "Info",
+      debug: "Debug",
+      trace: "Trace",
+      other: "Other",
+    },
+    sources: {
+      all: "All",
+    },
   },
   tproxyWhiteIpGroups: {
     title: "White IP Groups",
@@ -361,5 +439,39 @@ export default {
     ],
     formName: "Custom Download Link",
     wrongCustomLink: "wrong custom download link"
-  }
+  },
+  tinytun: {
+    routeScript: {
+      title: "TinyTun Custom Route Script",
+      warning: "Warning: Incorrect scripts may break your network or system routing. Make sure you know what you are doing before saving.",
+      shellType: "Shell Type",
+      customShell: "Custom (specify path below)",
+      shellPath: "Shell Path",
+      shellPathPlaceholder: "/usr/bin/bash",
+      setupScript: "Setup Script (runs after TinyTun starts)",
+      setupScriptPlaceholder: "# Script to configure routes when TinyTun starts\n# e.g. ip route add default dev tun0",
+      teardownScript: "Teardown Script (runs before TinyTun stops)",
+      teardownScriptPlaceholder: "# Script to remove routes when TinyTun stops\n# e.g. ip route del default dev tun0",
+    },
+    processExclude: {
+      title: "TinyTun Custom Process Exclusion",
+      warning: "Warning: incorrect process names may bypass traffic unexpectedly. Add only trusted process names.",
+      listLabel: "Excluded Process Names",
+      placeholder: "v2raya\nv2ray\nchrome.exe",
+      hint: "Supports comma or newline separators. Values are deduplicated when saved.",
+    },
+  },
+  customInbound: {
+    title: "Custom Inbound Ports",
+    tag: "Tag (remark name)",
+    protocol: "Protocol",
+    port: "Port",
+    addNew: "Add New Inbound",
+    tagPlaceholder: "e.g. my-socks",
+    portPlaceholder: "e.g. 10800",
+    empty: "No custom inbounds",
+    hint: "Only SOCKS and HTTP protocols are supported. Tag must be unique and will be used as the v2ray core tag.",
+    fillAll: "Please fill in all fields",
+    deleteConfirm: "Delete inbound {tag}?",
+  },
 };

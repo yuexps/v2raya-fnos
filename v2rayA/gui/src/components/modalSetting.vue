@@ -61,11 +61,12 @@
           </b-tooltip>
         </template>
         <b-select v-model="transparentType" expanded>
-          <option v-show="!lite" value="redirect">redirect</option>
-          <option v-show="!lite" value="tproxy">tproxy</option>
-          <option v-show="!lite" value="gvisor_tun">gvisor tun</option>
-          <option v-show="!lite" value="system_tun">system tun</option>
-          <option value="system_proxy">system proxy</option>
+          <option v-show="!lite && os === 'linux'" value="redirect">redirect</option>
+          <option v-show="!lite && os === 'linux'" value="tproxy">tproxy</option>
+          <option v-show="!lite" value="tun" :disabled="!tinytunSupported">
+            tun (TinyTun){{ !tinytunSupported ? ' — ' + $t("setting.options.notIntegrated") : '' }}
+          </option>
+          <option v-show="!(isRoot && (os === 'linux' || os === 'darwin'))" value="system_proxy">system proxy</option>
         </b-select>
 
         <template v-if="transparentType == 'tproxy'">
@@ -77,6 +78,114 @@
             " outlined @click="handleClickTproxyWhiteIpGroups">{{ $t("operations.tproxyWhiteIpGroups") }}
           </b-button>
         </template>
+
+        <template v-if="transparentType === 'tun' && tinytunSupported">
+          <b-tooltip type="is-dark" multilined :label="$t('setting.messages.tunAutoRoute')" position="is-top">
+            <b-checkbox-button v-model="tunAutoRoute" :native-value="true" style="position: relative; left: -1px">
+              {{ $t("setting.tunAutoRoute") }}
+            </b-checkbox-button>
+          </b-tooltip>
+          <b-button v-if="!tunAutoRoute" style="
+              margin-left: 0;
+              border-bottom-left-radius: 0;
+              border-top-left-radius: 0;
+              color: rgba(0, 0, 0, 0.75);
+            " outlined @click="handleClickTunRouteScript">{{ $t("operations.configureTunRouteScript") }}
+          </b-button>
+        </template>
+      </b-field>
+
+      <b-field v-show="transparent !== 'close' && (transparentType === 'tproxy' || transparentType === 'redirect')"
+        label-position="on-border">
+        <template slot="label">
+          {{ $t("setting.tproxyExcludedInterfaces") }}
+          <b-tooltip type="is-dark" multilined :label="$t('setting.messages.tproxyExcludedInterfaces')" position="is-right">
+            <b-icon size="is-small" icon=" iconfont icon-help-circle-outline"
+              style="position: relative; top: 2px; right: 3px; font-weight: normal" />
+          </b-tooltip>
+        </template>
+        <b-input v-model="tproxyExcludedInterfaces" expanded placeholder="docker*, veth*, wg*, ppp*, br-*" />
+      </b-field>
+
+      <b-field v-show="transparent !== 'close' && transparentType === 'tun' && tinytunSupported"
+        label-position="on-border">
+        <template slot="label">
+          {{ $t("setting.tunBypassInterfaces") }}
+        </template>
+        <div style="width: 100%; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap">
+          <b-dropdown
+            v-model="tunBypassInterfacesList"
+            multiple
+            scrollable
+            max-height="260"
+            :disabled="availableInterfaces.filter(i => !i.isLoopback).length === 0"
+            style="flex-shrink: 0"
+          >
+            <template #trigger>
+              <b-button icon-right="menu-down" style="min-width: 160px; justify-content: space-between">
+                <span v-if="tunBypassInterfacesList.length === 0" style="color: #aaa">
+                  {{ $t("setting.tunBypassSelectPlaceholder") }}
+                </span>
+                <span v-else>
+                  {{ $t("setting.tunBypassSelected", { n: tunBypassInterfacesList.length }) }}
+                </span>
+              </b-button>
+            </template>
+            <b-dropdown-item
+              v-for="iface in availableInterfaces.filter(i => !i.isLoopback)"
+              :key="iface.name"
+              :value="iface.name"
+            >
+              <div>
+                <span style="font-weight: 500">{{ iface.name }}</span>
+                <div v-if="iface.addrs && iface.addrs.length" style="font-size: 0.8em; color: #888; margin-top: 1px">
+                  {{ iface.addrs.join(', ') }}
+                </div>
+              </div>
+            </b-dropdown-item>
+          </b-dropdown>
+          <b-input
+            v-model="tunBypassCustom"
+            expanded
+            :placeholder="$t('setting.tunBypassCustomPlaceholder')"
+            style="flex: 1; min-width: 180px"
+          />
+        </div>
+      </b-field>
+
+      <b-field v-show="transparent !== 'close' && transparentType === 'tun' && tinytunSupported && os === 'linux'"
+        :label="$t('setting.tunProcessBackend')" label-position="on-border">
+        <template slot="label">
+          {{ $t("setting.tunProcessBackend") }}
+          <b-tooltip type="is-dark" multilined :label="$t('setting.messages.tunProcessBackend')" position="is-right">
+            <b-icon size="is-small" icon=" iconfont icon-help-circle-outline"
+              style="position: relative; top: 2px; right: 3px; font-weight: normal" />
+          </b-tooltip>
+        </template>
+        <b-select v-model="tunProcessBackend" expanded>
+          <option value="">{{ $t("setting.options.tunBackendTun") }}</option>
+          <option value="ebpf">{{ $t("setting.options.tunBackendEbpf") }}</option>
+        </b-select>
+      </b-field>
+
+      <b-field v-show="transparent !== 'close' && transparentType === 'tun' && tinytunSupported"
+        label-position="on-border">
+        <template slot="label">
+          {{ $t("setting.tunExcludeProcesses") }}
+          <b-tooltip type="is-dark" multilined :label="$t('setting.messages.tunExcludeProcesses')" position="is-right">
+            <b-icon size="is-small" icon=" iconfont icon-help-circle-outline"
+              style="position: relative; top: 2px; right: 3px; font-weight: normal" />
+          </b-tooltip>
+        </template>
+        <b-input :value="tunExcludeProcesses" readonly expanded
+          :placeholder="$t('tinytun.processExclude.placeholder')" />
+        <b-button style="
+            margin-left: 0;
+            border-bottom-left-radius: 0;
+            border-top-left-radius: 0;
+            color: rgba(0, 0, 0, 0.75);
+          " outlined @click="handleClickTunExcludeProcesses">{{ $t("operations.configure") }}
+        </b-button>
       </b-field>
 
       <b-field label-position="on-border">
@@ -117,47 +226,7 @@
         </template>
         <p></p>
       </b-field>
-      <b-field label-position="on-border">
-        <template slot="label">
-          {{ $t("setting.preventDnsSpoofing") }}
-          <b-tooltip type="is-dark" :label="$t('setting.messages.preventDnsSpoofing')" multilined position="is-right">
-            <b-icon size="is-small" icon=" iconfont icon-help-circle-outline"
-              style="position: relative; top: 2px; right: 3px; font-weight: normal" />
-          </b-tooltip>
-        </template>
-        <b-select v-model="antipollution" expanded class="left-border">
-          <option value="closed">{{ $t("setting.options.closed") }}</option>
-          <option value="none">
-            {{ $t("setting.options.antiDnsHijack") }}
-          </option>
-          <option value="dnsforward">
-            {{ $t("setting.options.forwardDnsRequest") }}
-          </option>
-          <option value="doh">{{ $t("setting.options.doh") }}</option>
-          <option value="advanced">{{ $t("setting.options.advanced") }}</option>
-        </b-select>
-        <b-button v-if="antipollution === 'advanced'" :class="{
-          'right-extra-button': antipollution === 'closed',
-          'no-border-radius': antipollution !== 'closed',
-        }" @click="handleClickDnsSetting">
-          {{ $t("operations.configure") }}
-        </b-button>
-        <p></p>
-      </b-field>
-      <b-field v-show="showSpecialMode" label-position="on-border">
-        <template slot="label">
-          {{ $t("setting.specialMode") }}
-          <b-tooltip type="is-dark" multilined :label="$t('setting.messages.specialMode')" position="is-right">
-            <b-icon size="is-small" icon=" iconfont icon-help-circle-outline"
-              style="position: relative; top: 2px; right: 3px; font-weight: normal" />
-          </b-tooltip>
-        </template>
-        <b-select v-model="specialMode" expanded class="left-border">
-          <option value="none">{{ $t("setting.options.closed") }}</option>
-          <option value="supervisor">supervisor</option>
-          <option v-show="antipollution !== 'closed'" value="fakedns">fakedns</option>
-        </b-select>
-      </b-field>
+
       <b-field label-position="on-border">
         <template slot="label">
           TCPFastOpen
@@ -170,6 +239,19 @@
           <option value="default">{{ $t("setting.options.default") }}</option>
           <option value="yes">{{ $t("setting.options.on") }}</option>
           <option value="no">{{ $t("setting.options.off") }}</option>
+        </b-select>
+      </b-field>
+
+      <b-field label-position="on-border">
+        <template slot="label">
+          {{ $t("setting.logLevel") }}
+        </template>
+        <b-select v-model="logLevel" expanded>
+          <option value="trace">{{ $t("setting.options.trace") }}</option>
+          <option value="debug">{{ $t("setting.options.debug") }}</option>
+          <option value="info">{{ $t("setting.options.info") }}</option>
+          <option value="warn">{{ $t("setting.options.warn") }}</option>
+          <option value="error">{{ $t("setting.options.error") }}</option>
         </b-select>
       </b-field>
 
@@ -215,6 +297,8 @@
           custom-class="no-shadow" type="number" min="1" max="1024" validation-icon=" iconfont icon-alert"
           style="flex: 1" />
       </b-field>
+
+
       <b-field v-show="pacMode === 'gfwlist' || transparent === 'gfwlist'" :label="$t('setting.autoUpdateGfwlist')"
         label-position="on-border">
         <b-select v-model="pacAutoUpdateMode" expanded>
@@ -259,9 +343,14 @@
       </b-field>
     </section>
     <footer class="modal-card-foot flex-end">
-      <button class="button footer-absolute-left" type="button" @click="$emit('clickPorts')">
-        {{ $t("customAddressPort.title") }}
-      </button>
+      <div class="footer-absolute-left" style="display: flex; gap: 8px;">
+        <button class="button" type="button" @click="$emit('clickPorts')">
+          {{ $t("customAddressPort.title") }}
+        </button>
+        <button class="button" type="button" @click="handleClickDnsSetting">
+          {{ $t("dns.title") }}
+        </button>
+      </div>
       <button class="button" type="button" @click="$parent.close()">
         {{ $t("operations.cancel") }}
       </button>
@@ -280,6 +369,8 @@ import ModalCustomRoutingA from "@/components/modalCustomRoutingA";
 import modalDomainsExcluded from "@/components/modalDomainsExcluded";
 import modalTproxyWhiteIpGroups from "@/components/modalTproxyWhiteIpGroups";
 import modalUpdateGfwList from "@/components/modalUpdateGfwList";
+import modalTinyTunRouteScript from "@/components/modalTinyTunRouteScript";
+import modalTinyTunExcludeProcesses from "@/components/modalTinyTunExcludeProcesses";
 import CusBInput from "./input/Input.vue";
 import { parseURL, toInt } from "@/assets/js/utils";
 import BButton from "buefy/src/components/button/Button";
@@ -295,6 +386,7 @@ export default {
   data: () => ({
     proxyModeWhenSubscribe: "direct",
     tcpFastOpen: "default",
+    logLevel: "info",
     muxOn: "no",
     mux: "8",
     transparent: "close",
@@ -302,10 +394,19 @@ export default {
     ipforward: false,
     portSharing: false,
     dnsForceMode: false,
-    dnsforward: "no",
-    antipollution: "none",
     routeOnly: false,
-    specialMode: "none",
+    tproxyExcludedInterfaces: "",
+    tunAutoRoute: true,
+    tunBypassInterfaces: "",
+    tunBypassInterfacesList: [],
+    tunBypassCustom: "",
+    availableInterfaces: [],
+    tunRouteShellType: "",
+    tunRouteShellPath: "",
+    tunSetupScript: "",
+    tunTeardownScript: "",
+    tunProcessBackend: "",
+    tunExcludeProcesses: "",
     pacAutoUpdateMode: "none",
     pacAutoUpdateIntervalHour: 0,
     subscriptionAutoUpdateMode: "none",
@@ -317,9 +418,36 @@ export default {
     serverListMode: "noSubscription",
     remoteGFWListVersion: "checking...",
     localGFWListVersion: "checking...",
-    showSpecialMode: true,
+    os: "",
+    isRoot: false,
+    tinytunSupported: false,
   }),
   computed: {
+    tunBypassInterfacesComputed: {
+      get() {
+        const parts = [];
+        if (this.tunBypassInterfacesList.length > 0) {
+          parts.push(...this.tunBypassInterfacesList);
+        }
+        if (this.tunBypassCustom.trim()) {
+          parts.push(
+            ...this.tunBypassCustom
+              .split(',')
+              .map((s) => s.trim())
+              .filter((s) => s.length > 0)
+          );
+        }
+        return [...new Set(parts)].join(',');
+      },
+      set(val) {
+        const parts = val
+          ? val.split(',').map((s) => s.trim()).filter((s) => s.length > 0)
+          : [];
+        const known = (this.availableInterfaces || []).map((i) => i.name);
+        this.tunBypassInterfacesList = parts.filter((p) => known.includes(p));
+        this.tunBypassCustom = parts.filter((p) => !known.includes(p)).join(',');
+      },
+    },
     lite() {
       return window.localStorage["lite"] && parseInt(window.localStorage["lite"]) > 0;
     },
@@ -336,9 +464,14 @@ export default {
     },
   },
   watch: {
-    antipollution(val) {
-      if (val === "closed" && this.specialMode === "fakedns") {
-        this.specialMode = "none";
+    transparentType(val) {
+      if (val === 'tun' && this.tinytunSupported) {
+        this.fetchNetworkInterfaces();
+      }
+    },
+    tinytunSupported(val) {
+      if (val && this.transparentType === 'tun') {
+        this.fetchNetworkInterfaces();
       }
     },
   },
@@ -348,6 +481,17 @@ export default {
   methods: {
     dayjs() {
       return dayjs.apply(this, arguments);
+    },
+    fetchNetworkInterfaces() {
+      this.$axios({ url: apiRoot + '/networkInterfaces' }).then((res) => {
+        if (res.data && res.data.data && res.data.data.interfaces) {
+          this.availableInterfaces = res.data.data.interfaces;
+          // Re-apply the tunBypassInterfaces string now that we know available names
+          if (this.tunBypassInterfaces) {
+            this.tunBypassInterfacesComputed = this.tunBypassInterfaces;
+          }
+        }
+      });
     },
     getSettingData() {
       this.$axios({
@@ -366,9 +510,21 @@ export default {
           Object.assign(this, res.data.data);
           this.subscriptionAutoUpdateTime = new Date(this.subscriptionAutoUpdateTime);
           this.pacAutoUpdateTime = new Date(this.pacAutoUpdateTime);
+          // Get OS and isRoot info from version API
+          this.$axios({
+            url: apiRoot + "/version",
+          }).then((versionRes) => {
+            if (versionRes.data && versionRes.data.data) {
+              this.os = versionRes.data.data.os || "";
+              this.isRoot = versionRes.data.data.isRoot || false;
+              this.tinytunSupported = versionRes.data.data.tinytunSupported || false;
+            }
+            if (this.transparentType === 'tun' && this.tinytunSupported) {
+              this.fetchNetworkInterfaces();
+            }
+          });
           if (this.lite) {
             this.transparentType = "system_proxy";
-            this.showSpecialMode = false;
           }
         });
       });
@@ -390,6 +546,7 @@ export default {
             ),
             pacMode: this.pacMode,
             tcpFastOpen: this.tcpFastOpen,
+            logLevel: this.logLevel,
             inboundSniffing: this.inboundSniffing,
             muxOn: this.muxOn,
             mux: parseInt(this.mux),
@@ -398,9 +555,15 @@ export default {
             ipforward: this.ipforward,
             portSharing: this.portSharing,
             routeOnly: this.routeOnly,
-            dnsforward: this.antipollution === "dnsforward" ? "yes" : "no", //版本兼容
-            antipollution: this.antipollution,
-            specialMode: this.specialMode,
+            tproxyExcludedInterfaces: this.tproxyExcludedInterfaces,
+            tunAutoRoute: this.tunAutoRoute,
+            tunBypassInterfaces: this.tunBypassInterfacesComputed,
+            tunRouteShellType: this.tunRouteShellType,
+            tunRouteShellPath: this.tunRouteShellPath,
+            tunSetupScript: this.tunSetupScript,
+            tunTeardownScript: this.tunTeardownScript,
+            tunProcessBackend: this.tunProcessBackend,
+            tunExcludeProcesses: this.tunExcludeProcesses,
           },
           cancelToken: new axios.CancelToken(function executor(c) {
             cancel = c;
@@ -429,19 +592,17 @@ export default {
       );
     },
     handleClickSubmit() {
-      if (this.muxOn === "yes" && this.$refs.muxinput && !this.$refs.muxinput.checkHtml5Validity()) {
+      if (this.muxOn === "yes" && !this.$refs.muxinput.checkHtml5Validity()) {
         return;
       }
       if (
         this.subscriptionAutoUpdateMode === "auto_update_at_intervals" &&
-        this.$refs.autoUpdateSubInput &&
         !this.$refs.autoUpdateSubInput.checkHtml5Validity()
       ) {
         return;
       }
       if (
         this.pacAutoUpdateMode === "auto_update_at_intervals" &&
-        this.$refs.autoUpdatePacInput &&
         !this.$refs.autoUpdatePacInput.checkHtml5Validity()
       ) {
         return;
@@ -500,6 +661,45 @@ export default {
         component: modalDnsSetting,
         hasModalCard: true,
         canCancel: true,
+      });
+    },
+    handleClickTunRouteScript() {
+      this.$buefy.modal.open({
+        parent: this,
+        component: modalTinyTunRouteScript,
+        hasModalCard: true,
+        canCancel: true,
+        props: {
+          os: this.os,
+          shellType: this.tunRouteShellType,
+          shellPath: this.tunRouteShellPath,
+          setupScript: this.tunSetupScript,
+          teardownScript: this.tunTeardownScript,
+        },
+        events: {
+          save: (data) => {
+            this.tunRouteShellType = data.shellType;
+            this.tunRouteShellPath = data.shellPath;
+            this.tunSetupScript = data.setupScript;
+            this.tunTeardownScript = data.teardownScript;
+          },
+        },
+      });
+    },
+    handleClickTunExcludeProcesses() {
+      this.$buefy.modal.open({
+        parent: this,
+        component: modalTinyTunExcludeProcesses,
+        hasModalCard: true,
+        canCancel: true,
+        props: {
+          excludeProcesses: this.tunExcludeProcesses,
+        },
+        events: {
+          save: (data) => {
+            this.tunExcludeProcesses = data.excludeProcesses;
+          },
+        },
       });
     },
   },

@@ -1,6 +1,6 @@
 export default {
   common: {
-    outboundSetting: "出站设置",
+    outboundSetting: "代理分组设置",
     setting: "设置",
     about: "关于",
     loggedAs: "正在以 <b>{username}</b> 的身份登录",
@@ -13,11 +13,16 @@ export default {
     local: "本地",
     success: "成功",
     fail: "失败",
+    empty: "没有加入节点",
     message: "提示",
     none: "无",
     optional: "可选",
     loadBalance: "负载均衡",
     log: "日志",
+    proxyGroups: "代理分组",
+    darkTheme: "深色主题",
+    lightTheme: "浅色主题",
+    autoTheme: "自动主题",
   },
   welcome: {
     title: "初来乍到，请多关照",
@@ -77,6 +82,9 @@ export default {
     connect: "连接",
     disconnect: "断开",
     select: "选择",
+    addTo: "添加到",
+    addToProxyGroup: "加入分组 {group}",
+    removeFromProxyGroup: "移出分组 {group}",
     login: "登录",
     logout: "注销",
     configure: "配置",
@@ -86,12 +94,19 @@ export default {
     saveApply: "保存并应用",
     save: "保存",
     copyLink: "复制链接",
+    export: "导出",
+    copySelected: "复制勾选节点",
+    downloadTxt: "下载 TXT 文件",
     helpManual: "查看帮助",
     yes: "是",
     no: "否",
     switchSite: "切换至备用站点",
-    addOutbound: "新增一个出站 (outbound)",
-    domainsExcluded: "排除域名"
+    addOutbound: "新增一个代理分组",
+    add: "添加",
+    close: "关闭",
+    domainsExcluded: "排除域名",
+    tproxyExcludedInterfaces: "不走代理的网卡前缀",
+    configureTunRouteScript: "配置路由脚本",
   },
   register: {
     title: "初来乍到，创建一个管理员账号",
@@ -110,17 +125,32 @@ export default {
     inboundSniffing: "嗅探",
     transparentProxy: "透明代理/系统代理",
     transparentType: "透明代理/系统代理实现方式",
+    logLevel: "日志等级",
     pacMode: "规则端口的分流模式",
-    preventDnsSpoofing: "防止DNS污染",
-    specialMode: "特殊模式",
     mux: "多路复用",
     autoUpdateSub: "自动更新订阅",
     autoUpdateGfwlist: "自动更新GFWList",
     preferModeWhenUpdate: "解析订阅链接/更新时优先使用",
+    tproxyExcludedInterfaces: "不走代理的网卡前缀",
+    tunAutoRoute: "自动路由",
+    tunBypassInterfaces: "TUN 不走代理的网卡",
+    tunBypassCustomPlaceholder: "自定义通配符，例如: docker*, vmnet*",
+    tunBypassSelectPlaceholder: "选择网卡...",
+    tunBypassSelected: "已选 {n} 个网卡",
     ipForwardOn: "开启IP转发",
-    portSharingOn: "开启端口分享",
+    portSharingOn: "允许局域网的连接",
     concurrency: "最大并发数",
+    tunProcessBackend: "TinyTun 进程排除方式",
+    tunExcludeProcesses: "TinyTun 自定义排除进程",
+    ssBackend: "Shadowsocks 后端",
+    trojanBackend: "Trojan 后端",
+    nodeBackend: "后端",
     options: {
+      trace: "跟踪",
+      debug: "调试",
+      info: "信息",
+      warn: "警告",
+      error: "错误",
       global: "不进行分流",
       direct: "直连模式",
       pac: "跟随规则端口",
@@ -128,12 +158,10 @@ export default {
       gfwlist: "GFWList模式",
       sameAsPacMode: "分流规则与规则端口所选模式一致",
       customRouting: "自定义路由规则",
-      antiDnsHijack: "仅防止DNS劫持(快速)",
-      forwardDnsRequest: "转发DNS请求",
-      doh: "DoH(DNS-over-HTTPS)",
       default: "保持系统默认",
       on: "启用",
       off: "关闭",
+      notIntegrated: "未集成",
       updateSubWhenStart: "服务端启动时更新订阅",
       updateSubAtIntervals: "每隔一段时间更新订阅（单位：小时）",
       updateGfwlistWhenStart: "服务端启动时更新GFWList",
@@ -142,6 +170,10 @@ export default {
       closed: "关闭",
       advanced: "自定义高级设置",
       leastPing: "最小时延优先",
+      tunBackendTun: "TUN（默认，/proc 进程查找）",
+      tunBackendEbpf: "eBPF（cgroupv2 进程排除）",
+      backendV2ray: "v2ray / xray",
+      backendSystemDefault: "跟随系统设置",
     },
     messages: {
       inboundSniffing: "嗅探入站域名，如不开启，可能导致部分域名分流错误",
@@ -149,14 +181,17 @@ export default {
       transparentProxy:
         "全局代理开启后，无需经过额外设置，任何TCP流量均会经过V2RayA。另外，如需作为网关使得连接本机的其他主机或docker也享受代理，请勾选“开启局域网共享”。",
       transparentType:
-        "★tproxy: 支持udp，不支持docker。★redirect: docker友好，不支持udp，需要占用本地53端口以应对dns污染。",
+        "★tproxy: 支持udp，不支持docker。★redirect: docker友好，不支持udp，需要占用本地53端口以应对dns污染。★tun (TinyTun): 跨平台TUN透明代理，需要tinytun二进制文件；Linux 下的数据面由 TinyTun 自身后端处理，生成的 YAML 配置需与 TinyTun 版本匹配。",
+      tproxyExcludedInterfaces:
+        "设置不经过透明代理的网卡前缀。支持通配符 * (iptables模式下会自动转换为 +)。例如: docker*, veth*, wg*, ppp*, br-*。多个前缀用逗号隔开。",
+      tunAutoRoute:
+        "开启时，TinyTun 自动配置系统路由。关闭时，需要提供自定义的启动/停止脚本手动配置路由。",
+      tunBypassInterfaces: "勾选不走 TUN 代理的网卡，或在下方输入自定义通配符。",
+      tunProcessBackend: "Linux 下选择 TinyTun 的进程排除实现。TUN 模式使用 /proc 查找，兼容性强；eBPF 模式通过 cgroupv2 钉子实现更准确的进程级排除，需安装 tinytun-ebpf.o（/usr/lib/tinytun/）。",
+      tunExcludeProcesses: "配置额外需要直通的进程名。建议一行一个，例如：chrome.exe、firefox。",
       pacMode:
         "该选项设置规则分流端口所使用的路由模式。默认情况下规则分流端口为20172，HTTP协议。",
-      preventDnsSpoofing:
-        "★转发DNS查询: 通过代理服务器转发DNS请求。" +
-        "★DoH(v2ray-core: 4.22.0+): DNS over HTTPS。",
-      specialMode:
-        "★supervisor：监控dns污染，提前拦截，利用v2ray-core的sniffing解决污染。★fakedns：使用fakedns策略加速解析。",
+      preventDnsSpoofing: "",
       tcpFastOpen:
         "简化TCP握手流程以加速建立连接，可能会增加封包的特征。若系统不支持可能会导致无法正常连接。",
       mux: "复用TCP连接以减少握手次数，但会影响吞吐量大的使用场景，如观看视频、下载、测速。当前仅支持vmess节点。可能会增加特征造成断流。",
@@ -183,7 +218,7 @@ export default {
     portApi: "Api 端口（0 表示随机）",
     apiServices: "API 启用服务",
     messages: [
-      "飞牛 NAS 原生版已自动适配 Unix Domain Socket 通信，无需手动配置服务端地址。",
+      "在飞牛 NAS 平台上，服务端地址已由系统自动配置与接管，禁止手动修改。",
       "docker模式下如果未使用<code>--privileged --network host</code>参数启动容器，可通过修改端口映射修改socks5、http端口。",
       "docker模式下不能正确判断端口占用，请确保输入的端口未被其他程序占用。",
       "如将端口设为0则表示关闭该端口。",
@@ -222,13 +257,17 @@ export default {
     ],
   },
   dns: {
-    title: "配置DNS服务器",
-    internalQueryServers: "域名查询服务器",
-    externalQueryServers: "国外域名查询服务器",
-    messages: [
-      "“@:(dns.internalQueryServers)” 用于查询国内域名，而 “@:(dns.externalQueryServers)” 用于查询国外域名。",
-      "如果将 “@:(dns.externalQueryServers)” 留空，“@:(dns.internalQueryServers)” 将会负责查询所有域名。",
-    ],
+    title: "DNS 设置",
+    help: "DNS 帮助",
+    helpTooltip: "查看 v2fly DNS 文档",
+    colServer: "DNS 服务器",
+    colDomains: "域名列表",
+    colOutbound: "出口",
+    serverPlaceholder: "如 8.8.8.8 或 https://dns.google/dns-query",
+    domainsPlaceholder: "每行一个，如 geosite:cn\n留空表示兜底 DNS",
+    addRule: "添加规则",
+    resetDefault: "恢复默认",
+    errNoRules: "至少需要一条 DNS 规则",
   },
   egressPortWhitelist: {
     title: "出方向端口白名单",
@@ -261,6 +300,25 @@ export default {
     password: "密码",
     origin: "原版",
     pinnedCertchainSha256: "固定证书链sha256",
+    maxEarlyData: "Max Early Data",
+    earlyDataHeaderName: "Early Data Header Name",
+    multiMode: "MultiMode",
+    idleTimeout: "Idle Timeout",
+    healthCheckTimeout: "Health Check Timeout",
+    permitWithoutStream: "Permit Without Stream",
+    initialWindowsSize: "Initial Windows Size",
+    wireguardName: "名称",
+    wireguardAddress: "服务器地址",
+    wireguardPort: "端口",
+    wireguardPublicKey: "公钥",
+    wireguardPrivateKey: "私钥",
+    wireguardLocalAddress: "本地地址",
+    wireguardDns: "DNS",
+    wireguardMtu: "MTU",
+    wireguardAllowedIPs: "允许的 IP 范围",
+    wireguardPersistentKeepalive: "持久化保活间隔",
+    wireguardPreSharedKey: "预共享密钥",
+    wireguardEndpoint: "端点地址",
   },
   configureSubscription: {
     title: "订阅配置",
@@ -283,16 +341,14 @@ export default {
       "检测到 geosite.dat, geoip.dat 文件或 v2ray-core 可能未正确安装，请检查",
     v2rayNotV5:
       "检测到 v2ray-core 的版本并非 v5，请使用 v5 版本或将 v2rayA 降级至 v1.5",
+    coreVersionMismatch:
+      "核心版本不匹配：v2raya_core 的版本必须与 v2rayA 版本完全一致。{err}",
   },
-  about: `<p>v2rayA 是 V2Ray 的一个 Web 客户端。</p>
-          <p class="about-small"><b>飞牛 NAS 原生适配版</b></p>
-          <p class="about-small">通信模式：Unix Domain Socket</p>
-          <p class="about-small">默认端口：</p>
-          <p class="about-small">20170: SOCKS协议</p>
-          <p class="about-small">20171: HTTP协议</p>
-          <p class="about-small">20172: 带分流规则的HTTP协议</p>
-          <p class="about-small">其他端口：</p>
-          <p class="about-small">32345: tproxy，透明代理所需 </p>
+  about: `<p>v2rayA 是 V2Ray/Xray 的 Web 客户端。</p>
+          <p class="about-small"><b>飞牛 NAS 专用版 (Linux x86_64 / aarch64)</b></p>
+          <p class="about-small">本版本已深度适配飞牛平台，采用 Unix Domain Socket 进行后端通信，无需占用主机的 TCP 管理端口。</p>
+          <p class="about-small"><b>默认端口：</b></p>
+          <p class="about-small">20172: 混合/分流代理端口（仅启用该端口，其余端口已默认禁用以防冲突）</p>
           <p>在使用中如果发现任何问题，欢迎<a href="https://github.com/v2rayA/v2rayA/issues">提出issue</a>.</p>
           <p>文档：<a href="https://v2raya.org">https://v2raya.org</a>.</p>`,
   axios: {
@@ -312,9 +368,14 @@ export default {
     messages: ["点击“查看帮助”按钮以获取帮助"],
   },
   outbound: {
-    addMessage: "请输入你想要添加的出站(outbound)名称：",
+    addMessage: "请输入你想要添加的代理分组名称：",
     deleteMessage:
       '确定要<b>删除</b>出站 "{outboundName}" 吗？注意，该操作是不可逆的。',
+  },
+  proxyGroup: {
+    pickTitle: "添加到代理分组",
+    pickMessage: "选择要加入的代理分组。",
+    group: "代理分组",
   },
   driver: {
     welcome: [
@@ -328,9 +389,25 @@ export default {
   },
   log: {
     logModalTitle: "查看日志",
+    logsLabel: "日志",
     refreshInterval: "刷新间隔",
     seconds: "秒",
     autoScoll: "自动滚动",
+    autoShowNew: "自动显示新日志",
+    category: "分类",
+    source: "日志来源",
+    categories: {
+      all: "全部",
+      error: "错误",
+      warn: "警告",
+      info: "信息",
+      debug: "调试",
+      trace: "跟踪",
+      other: "其他",
+    },
+    sources: {
+      all: "全部",
+    },
   },
   
   tproxyWhiteIpGroups: {
@@ -365,5 +442,39 @@ export default {
     ],
     formName: "自定义下载链接",
     wrongCustomLink: "错误的自定义下载链接"
-  }
+  },
+  tinytun: {
+    routeScript: {
+      title: "TinyTun 自定义路由脚本",
+      warning: "警告：错误的脚本可能会破坏您的网络或系统路由。请确保您清楚自己正在做什么再保存。",
+      shellType: "Shell 类型",
+      customShell: "自定义（在下方指定路径）",
+      shellPath: "Shell 路径",
+      shellPathPlaceholder: "/usr/bin/bash",
+      setupScript: "启动脚本（TinyTun 启动后执行）",
+      setupScriptPlaceholder: "# TinyTun 启动时配置路由的脚本\n# 例如: ip route add default dev tun0",
+      teardownScript: "停止脚本（TinyTun 停止前执行）",
+      teardownScriptPlaceholder: "# TinyTun 停止时移除路由的脚本\n# 例如: ip route del default dev tun0",
+    },
+    processExclude: {
+      title: "TinyTun 自定义进程排除",
+      warning: "警告：错误的进程名可能导致流量被意外直通。请仅添加你确认需要排除的进程。",
+      listLabel: "排除进程名称",
+      placeholder: "v2raya\nv2ray\nchrome.exe",
+      hint: "支持逗号或换行分隔。保存时会自动去重。",
+    },
+  },
+  customInbound: {
+    title: "自定义入站端口",
+    tag: "标签（备注名称）",
+    protocol: "协议",
+    port: "端口",
+    addNew: "添加新入站",
+    tagPlaceholder: "如 my-socks",
+    portPlaceholder: "如 10800",
+    empty: "暂无自定义入站",
+    hint: "入站端口仅支持 SOCKS 和 HTTP 协议，标签必须唯一，将作为 v2ray core 的 tag 使用。",
+    fillAll: "请喆写全部字段",
+    deleteConfirm: "确认删除入站 {tag}？",
+  },
 };

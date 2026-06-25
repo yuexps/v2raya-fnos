@@ -1,0 +1,199 @@
+name: Build and Package v2rayA for fnOS
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'v2rayA/**'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: '是否发布 pre-release'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+        - 'true'
+        - 'false'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  TZ: Asia/Shanghai
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  build-and-pack:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v7
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: 22
+        cache: 'yarn'
+        cache-dependency-path: 'v2rayA/gui/yarn.lock'
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version-file: 'v2rayA/core/go.mod'
+        cache-dependency-path: |
+          v2rayA/core/go.sum
+          v2rayA/service/go.sum
+
+    - name: Download Geo Rules
+      run: |
+        mkdir -p fnpack/app/geo
+        curl -sSL -H "Authorization: Bearer $GH_TOKEN" https://github.com/v2rayA/dist-v2ray-rules-dat/raw/refs/heads/master/geoip.dat -o fnpack/app/geo/geoip.dat
+        curl -sSL -H "Authorization: Bearer $GH_TOKEN" https://github.com/v2rayA/dist-v2ray-rules-dat/raw/refs/heads/master/geosite.dat -o fnpack/app/geo/geosite.dat
+        curl -sSL -H "Authorization: Bearer $GH_TOKEN" https://github.com/v2rayA/dist-v2ray-rules-dat/raw/refs/heads/master/geosite.dat -o fnpack/app/geo/LoyalsoldierSite.dat
+
+    - name: Build Web Frontend
+      run: |
+        cd v2rayA/gui
+        yarn install
+        OUTPUT_DIR=../service/server/router/web yarn build
+
+    - name: Build Go Backend Cores and Core Binary
+      run: |
+        mkdir -p fnpack/app/x86 fnpack/app/arm
+        cd v2rayA/service
+        # 编译 amd64 架构后端
+        GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -tags "tinytun" -ldflags "-s -w" -o ../../fnpack/app/x86/v2raya_sock
+        # 编译 arm64 架构后端
+        GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags "tinytun" -ldflags "-s -w" -o ../../fnpack/app/arm/v2raya_sock
+        
+        cd ../core
+        # 编译 amd64 自编译内核
+        GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w" -o ../../fnpack/app/x86/v2raya_core ./main
+        # 编译 arm64 自编译内核
+        GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "-s -w" -o ../../fnpack/app/arm/v2raya_core ./main
+
+    - name: Generate Version
+      id: get_version
+      run: |
+        # 生成日期版本号 (YY.M.D)
+        DATE_VERSION=$(date +%y.%-m.%-d)
+        echo "version=${DATE_VERSION}" >> $GITHUB_OUTPUT
+        echo "Build version: ${DATE_VERSION}"
+
+    - name: Pack FPK Packages
+      id: pack
+      run: |
+        DATE_VERSION="${{ steps.get_version.outputs.version }}"
+        
+        # 赋予 fnpack 工具执行权限并安装到系统路径
+        chmod +x fnpack/fnpack-1.2.1-linux-amd64
+        sudo cp fnpack/fnpack-1.2.1-linux-amd64 /usr/local/bin/fnpack
+        
+        # 备份一份干净的打包文件目录
+        cp -r fnpack fnpack_backup
+        
+        # === 1. 打包 x86 (amd64) 版本 ===
+        echo "Building x86 package..."
+        rm -rf fnpack/app/arm
+        sed -i "s/^platform.*/platform        = x86/" fnpack/manifest
+        sed -i "s/^version.*/version         = ${DATE_VERSION}/" fnpack/manifest
+        sed -i "s/^changelog.*/changelog       = Rebuild core ${DATE_VERSION} for x86/" fnpack/manifest
+        
+        cd fnpack
+        fnpack build
+        FPK_X86=$(ls *.fpk | head -n 1)
+        mv "${FPK_X86}" "../v2raya_x86.fpk"
+        cd ..
+        
+        # 恢复干净的打包目录
+        rm -rf fnpack
+        cp -r fnpack_backup fnpack
+        
+        # === 2. 打包 arm (arm64) 版本 ===
+        echo "Building arm package..."
+        rm -rf fnpack/app/x86
+        sed -i "s/^platform.*/platform        = arm/" fnpack/manifest
+        sed -i "s/^version.*/version         = ${DATE_VERSION}/" fnpack/manifest
+        sed -i "s/^changelog.*/changelog       = Rebuild core ${DATE_VERSION} for arm/" fnpack/manifest
+        
+        cd fnpack
+        fnpack build
+        FPK_ARM=$(ls *.fpk | head -n 1)
+        mv "${FPK_ARM}" "../v2raya_arm.fpk"
+        cd ..
+        
+        # 恢复干净的打包目录，以便后续提交回仓库（此时 platform 变回 all，且 x86/arm 的 core 二进制均保留）
+        rm -rf fnpack
+        cp -r fnpack_backup fnpack
+        
+        # 清理备份目录
+        rm -rf fnpack_backup
+        
+        echo "x86_fpk=v2raya_x86.fpk" >> $GITHUB_OUTPUT
+        echo "arm_fpk=v2raya_arm.fpk" >> $GITHUB_OUTPUT
+
+    - name: Upload x86 Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: v2raya-${{ steps.get_version.outputs.version }}-x86
+        path: ${{ steps.pack.outputs.x86_fpk }}
+        retention-days: 30
+
+    - name: Upload arm Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: v2raya-${{ steps.get_version.outputs.version }}-arm
+        path: ${{ steps.pack.outputs.arm_fpk }}
+        retention-days: 30
+
+    - name: Update manifest version in repository
+      run: |
+        DATE_VERSION="${{ steps.get_version.outputs.version }}"
+        # 始终更新主仓库 manifest 中的 App 包版本号 (日期版本号)
+        sed -i "s/^version.*/version         = ${DATE_VERSION}/" fnpack/manifest
+        
+
+    - name: Delete old pre-releases
+      if: github.event_name == 'schedule' || github.event.inputs.create_release == 'true'
+      run: |
+        # 删除所有旧的 pre-release 标签，保持 Release 干净
+        gh release list --limit 100 --json tagName,isPrerelease | jq -r '.[] | select(.isPrerelease == true) | .tagName' | while read tag; do
+          echo "Deleting old pre-release: $tag"
+          gh release delete "$tag" --yes || true
+        done
+
+    - name: Create Pre-release
+      if: github.event_name == 'schedule' || github.event.inputs.create_release == 'true'
+      uses: softprops/action-gh-release@v3
+      with:
+        tag_name: v${{ steps.get_version.outputs.version }}-pre
+        name: v2rayA for fnOS ${{ steps.get_version.outputs.version }}
+        body: |
+          ## Auto-built Dedicated Pre-release
+          
+          This version is automatically built and compiled by GitHub Actions.
+          
+          *Built on: ${{ steps.get_version.outputs.version }}*
+        files: |
+          ${{ steps.pack.outputs.x86_fpk }}
+          ${{ steps.pack.outputs.arm_fpk }}
+        prerelease: true
+        draft: false
+
+    - name: Commit and push changes
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        
+        git add fnpack/manifest fnpack/app/geo/
+        
+        DATE_VERSION="${{ steps.get_version.outputs.version }}"
+        COMMIT_MSG="chore: auto update manifest and geo to version ${DATE_VERSION}"
+        
+        git diff --staged --quiet || git commit -m "$COMMIT_MSG"
+        git push

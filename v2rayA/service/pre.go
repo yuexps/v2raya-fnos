@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -25,6 +26,7 @@ import (
 	"github.com/v2rayA/v2rayA/db/configure"
 	"github.com/v2rayA/v2rayA/pkg/util/copyfile"
 	"github.com/v2rayA/v2rayA/pkg/util/log"
+	"github.com/v2rayA/v2rayA/pkg/util/privilege"
 	"github.com/v2rayA/v2rayA/server/router"
 	"github.com/v2rayA/v2rayA/server/service"
 
@@ -45,13 +47,20 @@ func checkEnvironment() {
 		os.Exit(0)
 	}
 	if !config.PassCheckRoot {
-		if os.Getegid() != 0 {
-			log.Fatal("Please execute this program with sudo or as a root user for the best experience.\n" +
-				"If you are sure you are root user, use the --passcheckroot parameter to skip the check.\n" +
-				"If you don't want to run as root or you are a non-linux user, use --lite please.\n" +
-				"For example:\n" +
-				"$ v2raya --lite",
-			)
+		switch runtime.GOOS {
+		case "linux":
+			if !privilege.IsRootOrAdmin() && !config.Lite {
+				log.Fatal("Please execute this program with sudo or as a root user for the best experience.\n" +
+					"If you are sure you are root user, use the --passcheckroot parameter to skip the check.\n" +
+					"If you don't want to run as root or you are a non-linux user, use --lite please.\n" +
+					"For example:\n" +
+					"$ v2raya --lite",
+				)
+			}
+		case "windows":
+			if !privilege.IsRootOrAdmin() && !config.Lite {
+				log.Fatal("Please run v2rayA as Administrator (or SYSTEM) with elevation, or start with --lite to skip privilege checks.")
+			}
 		}
 	}
 	if config.ResetPassword {
@@ -85,7 +94,7 @@ func checkTProxySupportability() {
 	if conf.GetEnvironmentConfig().Lite {
 		return
 	}
-	//检查tproxy是否可以启用
+	// check if tproxy can be enabled
 	if err := service2.CheckAndProbeTProxy(); err != nil {
 		log.Info("Cannot load TPROXY module: %v", err)
 	}
@@ -100,67 +109,117 @@ func initDBValue() {
 }
 
 func initConfigure() {
-	//初始化配置
+	// initialize configuration
 	jsonIteratorExtra.RegisterFuzzyDecoders()
+
+	// Track whether we performed a BoltDB→SQLite migration in this session.
+	// If so, we must skip the v4 migration and initDBValue() below, because
+	// the data has already been migrated into SQLite by MigrateFromBoltDB().
+	migratedFromBoltDB := false
+
+	// Try to initialize SQLite database.
+	// If an old BoltDB database (bolt.db) exists, Open() returns ErrNeedMigration,
+	// and we must run the migration first.
+	err := db.Open()
+	if errors.Is(err, db.ErrNeedMigration) {
+		log.Warn("Detected legacy BoltDB database, migrating to SQLite...")
+		if err := db.MigrateFromBoltDB(); err != nil {
+			log.Fatal("Database migration failed: %v", err)
+		}
+		migratedFromBoltDB = true
+		// Migration succeeded (MigrateFromBoltDB already logged the completion);
+		// now initialize SQLite normally.
+		if err := db.Open(); err != nil {
+			// If SQLite initialization fails after migration, restore the backup
+			// so the migration can be retried on next startup.
+			confPath := conf.GetEnvironmentConfig().Config
+			backupPath := filepath.Join(confPath, "bolt.db.bak")
+			if _, e := os.Stat(backupPath); e == nil {
+				if renameErr := os.Rename(backupPath, filepath.Join(confPath, "bolt.db")); renameErr == nil {
+					log.Warn("Restored bolt.db from bolt.db.bak due to SQLite initialization failure")
+				}
+			}
+			log.Fatal("Failed to initialize SQLite after migration: %v", err)
+		}
+	} else if err != nil {
+		log.Fatal("Failed to initialize database: %v", err)
+	}
 
 	//db
 	dbPath := filepath.Join(conf.GetEnvironmentConfig().Config, "bolt.db")
 	if _, e := os.Lstat(dbPath); os.IsNotExist(e) {
-		//confv4.SetConfig(confv4.Params{Config: conf.GetEnvironmentConfig().Config})
-		// need to migrate?
-		if !configurev4.IsConfigureNotExists() {
-			// There is different format in server and subscription.
-			// So we keep other content and reimport servers and subscriptions.
-			log.Warn("Migrating from v4 to main")
-			if err := copyfile.CopyFileContent(filepath.Join(
-				confv4.GetEnvironmentConfig().Config,
-				"boltv4.db",
-			), filepath.Join(
-				conf.GetEnvironmentConfig().Config,
-				"bolt.db",
-			)); err != nil {
-				log.Fatal("Failed to copy boltv4.db to bolt.db: %v", err)
-			}
-
-			// clear connects of outbounds
-			for _, out := range configure.GetOutbounds() {
-				_ = configure.ClearConnects(out)
-			}
-			var indexes []int
-			for i := 0; i < configurev4.GetLenServers(); i++ {
-				indexes = append(indexes, i)
-			}
-			_ = configure.RemoveServers(indexes)
-
-			indexes = nil
-			for i := 0; i < configurev4.GetLenSubscriptions(); i++ {
-				indexes = append(indexes, i)
-			}
-			_ = configure.RemoveSubscriptions(indexes)
-
-			// migrate servers and subscriptions
-			t := touchv4.GenerateTouch()
-			subs := configurev4.GetSubscriptionsV2()
-			for _, sub := range subs {
-				log.Info("Importing subscription: %v", sub.Address)
-				if e := service.Import(sub.Address, nil); e != nil {
-					log.Warn("Failed to migrate subscription: %v", sub.Address)
-				}
-			}
-			for iSvr := range t.Servers {
-				if addr, e := servicev4.GetSharingAddress(&configurev4.Which{
-					TYPE: configurev4.ServerType,
-					ID:   iSvr + 1,
-				}); e == nil {
-					if e := service.Import(addr, nil); e != nil {
-						log.Warn("Failed to migrate server: %v", addr)
+		// If we just migrated from BoltDB to SQLite, the data is already in
+		// SQLite. Do NOT run initDBValue() or v4 migration, as that would
+		// overwrite or clear the freshly migrated data.
+		if !migratedFromBoltDB {
+			// db.IsNewDB is true only when v2raya.db was just created by Open()
+			// (i.e., it did not exist before). In that case, we need to initialize
+			// the default configuration values.
+			// If db.IsNewDB is false, v2raya.db already existed (from a previous
+			// migration or a previous startup), so we skip initialization.
+			if db.IsNewDB {
+				//confv4.SetConfig(confv4.Params{Config: conf.GetEnvironmentConfig().Config})
+				// need to migrate?
+				if !configurev4.IsConfigureNotExists() {
+					// There is different format in server and subscription.
+					// So we keep other content and reimport servers and subscriptions.
+					log.Warn("Migrating from v4 to main")
+					if err := copyfile.CopyFileContent(filepath.Join(
+						confv4.GetEnvironmentConfig().Config,
+						"boltv4.db",
+					), filepath.Join(
+						conf.GetEnvironmentConfig().Config,
+						"bolt.db",
+					)); err != nil {
+						log.Fatal("Failed to copy boltv4.db to bolt.db: %v", err)
 					}
+
+					// clear connects of outbounds
+					for _, out := range configure.GetOutbounds() {
+						_ = configure.ClearConnects(out)
+					}
+					var indexes []int
+					for i := 0; i < configurev4.GetLenServers(); i++ {
+						indexes = append(indexes, i)
+					}
+					_ = configure.RemoveServers(indexes)
+
+					indexes = nil
+					for i := 0; i < configurev4.GetLenSubscriptions(); i++ {
+						indexes = append(indexes, i)
+					}
+					_ = configure.RemoveSubscriptions(indexes)
+
+					// migrate servers and subscriptions
+					t := touchv4.GenerateTouch()
+					subs := configurev4.GetSubscriptionsV2()
+					for _, sub := range subs {
+						log.Info("Importing subscription: %v", sub.Address)
+						if e := service.Import(sub.Address, nil); e != nil {
+							log.Warn("Failed to migrate subscription: %v", sub.Address)
+						}
+					}
+					for iSvr := range t.Servers {
+						if addr, e := servicev4.GetSharingAddress(&configurev4.Which{
+							TYPE: configurev4.ServerType,
+							ID:   iSvr + 1,
+						}); e == nil {
+							if e := service.Import(addr, nil); e != nil {
+								log.Warn("Failed to migrate server: %v", addr)
+							}
+						}
+					}
+
+					log.Warn("Migration is done")
+				} else {
+					initDBValue()
 				}
 			}
+		}
 
-			log.Warn("Migration is done")
-		} else {
-			initDBValue()
+		// ensure the default "proxy" outbound group exists
+		if err := configure.InitDefaultOutbound(); err != nil {
+			log.Warn("initDefaultOutbound: %v", err)
 		}
 	}
 
@@ -168,16 +227,16 @@ func initConfigure() {
 		configure.SetTproxyWhiteIpGroups([]string{"PRIVATE"}, []string{})
 	}
 
-	//检查config.json是否存在
+	// check if config.json exists
 	if _, err := os.Stat(asset.GetV2rayConfigPath()); err != nil {
-		//不存在就建一个。多数情况发生于docker模式挂载volume时覆盖了/etc/v2ray
+		// if not exists, create one. This mostly happens when mounting a volume in docker mode and it covers /etc/v2ray.
 		t := v2ray.Template{}
 		_ = v2ray.WriteV2rayConfig(t.ToConfigBytes())
 	}
 
-	//首先确定v2ray是否存在
+	// first determine if v2ray exists
 	if _, err := where.GetV2rayBinPath(); err == nil {
-		//检查geoip、geosite是否存在
+		// check if geoip, geosite exist
 		if !asset.DoesV2rayAssetExist("geoip.dat") || !asset.DoesV2rayAssetExist("geosite.dat") {
 			log.Alert("downloading missing geoip.dat and geosite.dat")
 			var l net.Listener
@@ -189,7 +248,7 @@ func initConfigure() {
 				c.Header("Cache-Control", "no-cache, no-store, max-age=0, must-revalidate")
 				c.Header("Pragma", "no-cache")
 				c.Header("Expires", "0")
-				c.String(200, "Downloading missing geoip.dat and geosite.dat; refresh the page later.\n正在下载缺失的 geoip.dat 和 geosite.dat，请稍后刷新页面。")
+				c.String(200, "Downloading missing geoip.dat and geosite.dat; refresh the page later.")
 			})
 			go e.RunListener(l)
 			if !asset.DoesV2rayAssetExist("geoip.dat") {
@@ -230,7 +289,7 @@ func hello() {
 func updateSubscriptions() {
 	subs := configure.GetSubscriptions()
 	lenSubs := len(subs)
-	control := make(chan struct{}, 2) //并发限制同时更新2个订阅
+	control := make(chan struct{}, 2) // concurrency limit: update 2 subscriptions at a time
 	// Disconnect from subscriptions before auto-selecting servers from them
 	// to limit the number of connected servers and avoid hitting the limit
 	shouldDisconnect := true
@@ -245,9 +304,9 @@ func updateSubscriptions() {
 			control <- struct{}{}
 			err := service.UpdateSubscription(i, false)
 			if err != nil {
-				log.Info("[AutoUpdate] Subscriptions: Failed to update subscription -- ID: %d，err: %v", i, err)
+				log.Info("[AutoUpdate] Subscriptions: Failed to update subscription -- ID: %d, err: %v", i, err)
 			} else {
-				log.Info("[AutoUpdate] Subscriptions: Complete updating subscription -- ID: %d，Address: %s", i, subs[i].Address)
+				log.Info("[AutoUpdate] Subscriptions: Complete updating subscription -- ID: %d, Address: %s", i, subs[i].Address)
 			}
 			wg.Done()
 			<-control
@@ -283,10 +342,10 @@ func initUpdatingTicker() {
 func checkUpdate() {
 	setting := service.GetSetting()
 
-	//初始化ticker
+	// initialize ticker
 	initUpdatingTicker()
 
-	//检查PAC文件更新
+	// check for PAC file updates
 	if setting.GFWListAutoUpdateMode == configure.AutoUpdate ||
 		setting.GFWListAutoUpdateMode == configure.AutoUpdateAtIntervals ||
 		setting.Transparent == configure.TransparentGfwlist {
@@ -296,7 +355,7 @@ func checkUpdate() {
 		switch setting.RulePortMode {
 		case configure.GfwlistMode:
 			go func() {
-				/* 更新LoyalsoldierSite.dat */
+				/* Update LoyalsoldierSite.dat */
 				localGFWListVersion, err := dat.CheckAndUpdateGFWList("")
 				if err != nil {
 					log.Warn("Failed to update PAC file: %v", err.Error())
@@ -309,7 +368,7 @@ func checkUpdate() {
 		}
 	}
 
-	//检查订阅更新
+	// check for subscription updates
 	if setting.SubscriptionAutoUpdateMode == configure.AutoUpdate ||
 		setting.SubscriptionAutoUpdateMode == configure.AutoUpdateAtIntervals {
 
@@ -318,7 +377,7 @@ func checkUpdate() {
 		}
 		go updateSubscriptions()
 	}
-	// 检查服务端更新
+	// check for server updates
 	go func() {
 		f := func() {
 			if foundNew, remote, err := service.CheckUpdate(); err == nil {
@@ -335,7 +394,7 @@ func checkUpdate() {
 }
 
 func run() (err error) {
-	//判别需要启动v2ray吗
+	// check if v2ray should be started
 	if configure.GetRunning() {
 		//configure the ip forward
 		setting := service.GetSetting()
@@ -357,11 +416,11 @@ func run() (err error) {
 	//log.Println(err, ", which:", w)
 	//_ = configure.ClearConnected()
 	errch := make(chan error)
-	//启动服务端
+	// start server
 	go func() {
 		errch <- router.Run()
 	}()
-	//监听信号，处理透明代理的关闭
+	// listen for signals to handle transparent proxy shutdown
 	go func() {
 		sigs := make(chan os.Signal, 1)
 		signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGKILL, syscall.SIGILL)
@@ -374,6 +433,6 @@ func run() (err error) {
 	fmt.Println("Quitting...")
 	v2ray.ProcessManager.CheckAndStopTransparentProxy(nil)
 	v2ray.ProcessManager.Stop(false)
-	_ = db.DB().Close()
+	_ = db.Close()
 	return nil
 }

@@ -8,7 +8,6 @@ import (
 
 	"github.com/v2rayA/v2rayA/common/cmds"
 	"github.com/v2rayA/v2rayA/core/v2ray/asset"
-	"github.com/v2rayA/v2rayA/db/configure"
 )
 
 var (
@@ -40,9 +39,6 @@ func (t *legacyTproxy) AddIPWhitelist(cidr string) {
 	// avoid duplication
 	t.RemoveIPWhitelist(cidr)
 	pos := 7
-	if configure.GetSettingNotNil().AntiPollution != configure.AntipollutionClosed {
-		pos += 3
-	}
 	if notSkip, _ := strconv.ParseBool(TproxyNotSkipBr); notSkip {
 		pos--
 	}
@@ -91,22 +87,15 @@ iptables -w 2 -t mangle -A TP_PRE -p udp -m mark --mark 0x40/0xc0 -j TPROXY --on
 
 iptables -w 2 -t mangle -A TP_RULE -j CONNMARK --restore-mark
 iptables -w 2 -t mangle -A TP_RULE -m mark --mark 0x40/0xc0 -j RETURN
-iptables -w 2 -t mangle -A TP_RULE -i docker+ -j RETURN
 `
-	if notSkip, _ := strconv.ParseBool(TproxyNotSkipBr); !notSkip {
-		commands += `iptables -w 2 -t mangle -A TP_RULE -i br+ -j RETURN`
+	for _, v := range GetExcludedInterfaces() {
+		commands += fmt.Sprintf("iptables -w 2 -t mangle -A TP_RULE -i %s -j RETURN\n", strings.ReplaceAll(v, "*", "+"))
 	}
 	commands += `
-iptables -w 2 -t mangle -A TP_RULE -i veth+ -j RETURN
-iptables -w 2 -t mangle -A TP_RULE -i ppp+ -j RETURN
-`
-	if configure.GetSettingNotNil().AntiPollution != configure.AntipollutionClosed {
-		commands += `
 iptables -w 2 -t mangle -A TP_RULE -p udp --dport 53 -j TP_MARK
 iptables -w 2 -t mangle -A TP_RULE -p tcp --dport 53 -j TP_MARK
 iptables -w 2 -t mangle -A TP_RULE -m mark --mark 0x40/0xc0 -j RETURN
 `
-	}
 
 	if IsEnabledTproxyWhiteIpGroups() {
 		whiteIpv4List, _ := GetWhiteListIPs()
@@ -147,21 +136,14 @@ ip6tables -w 2 -t mangle -A TP_PRE -p udp -m mark --mark 0x40/0xc0 -j TPROXY --o
 ip6tables -w 2 -t mangle -A TP_RULE -j CONNMARK --restore-mark
 ip6tables -w 2 -t mangle -A TP_RULE -m mark --mark 0x40/0xc0 -j RETURN
 `
-		if notSkip, _ := strconv.ParseBool(TproxyNotSkipBr); !notSkip {
-			commands += `ip6tables -w 2 -t mangle -A TP_RULE -i br+ -j RETURN`
+		for _, v := range GetExcludedInterfaces() {
+			commands += fmt.Sprintf("ip6tables -w 2 -t mangle -A TP_RULE -i %s -j RETURN\n", strings.ReplaceAll(v, "*", "+"))
 		}
 		commands += `
-ip6tables -w 2 -t mangle -A TP_RULE -i docker+ -j RETURN
-ip6tables -w 2 -t mangle -A TP_RULE -i veth+ -j RETURN
-ip6tables -w 2 -t mangle -A TP_RULE -i ppp+ -j RETURN
-`
-		if configure.GetSettingNotNil().AntiPollution != configure.AntipollutionClosed {
-			commands += `
 ip6tables -w 2 -t mangle -A TP_RULE -p udp --dport 53 -j TP_MARK
 ip6tables -w 2 -t mangle -A TP_RULE -p tcp --dport 53 -j TP_MARK
 ip6tables -w 2 -t mangle -A TP_RULE -m mark --mark 0x40/0xc0 -j RETURN
 `
-		}
 		if IsEnabledTproxyWhiteIpGroups() {
 			_, whiteIpv6List := GetWhiteListIPs()
 			for _, v := range whiteIpv6List {
@@ -307,14 +289,10 @@ func (t *nftTproxy) GetSetupCommands() Setter {
         meta mark set ct mark
         meta mark & 0xc0 == 0x40 return
 `
-	if notSkip, _ := strconv.ParseBool(TproxyNotSkipBr); !notSkip {
-		table += `        iifname "br-*" return`
+	for _, v := range GetExcludedInterfaces() {
+		table += fmt.Sprintf("        iifname \"%s\" return\n", v)
 	}
 	table += `
-        iifname "docker*" return
-        iifname "veth*" return
-        iifname "wg*" return
-        iifname "ppp*" return
         # anti-pollution
         ip daddr @interface return
 	`
@@ -336,12 +314,10 @@ func (t *nftTproxy) GetSetupCommands() Setter {
     }
 }
 `
-	if configure.GetSettingNotNil().AntiPollution != configure.AntipollutionClosed {
-		table = strings.ReplaceAll(table, "# anti-pollution", `
+	table = strings.ReplaceAll(table, "# anti-pollution", `
         meta l4proto { tcp, udp } th dport 53 jump tp_mark
         meta mark & 0xc0 == 0x40 return
 		`)
-	}
 
 	if !IsIPv6Supported() {
 		// drop ipv6 packets hooks

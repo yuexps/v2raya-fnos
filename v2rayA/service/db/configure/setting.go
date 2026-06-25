@@ -7,6 +7,7 @@ import (
 )
 
 type Setting struct {
+	LogLevel                           string          `json:"logLevel"`
 	RulePortMode                       RulePortMode    `json:"pacMode"`
 	ProxyModeWhenSubscribe             ProxyMode       `json:"proxyModeWhenSubscribe"`
 	GFWListAutoUpdateMode              AutoUpdateMode  `json:"pacAutoUpdateMode"`
@@ -21,13 +22,23 @@ type Setting struct {
 	IpForward                          bool            `json:"ipforward"`
 	RouteOnly                          bool            `json:"routeOnly"`
 	PortSharing                        bool            `json:"portSharing"`
-	SpecialMode                        SpecialMode     `json:"specialMode"`
 	TransparentType                    TransparentType `json:"transparentType"`
-	AntiPollution                      Antipollution   `json:"antipollution"`
+	TproxyExcludedInterfaces           string          `json:"tproxyExcludedInterfaces"`
+	TunBypassInterfaces                string          `json:"tunBypassInterfaces"`
+	TunAutoRoute                       bool            `json:"tunAutoRoute"`
+	TunRouteShellType                  string          `json:"tunRouteShellType"`
+	TunRouteShellPath                  string          `json:"tunRouteShellPath"`
+	TunSetupScript                     string          `json:"tunSetupScript"`
+	TunTeardownScript                  string          `json:"tunTeardownScript"`
+	TunProcessBackend                  string          `json:"tunProcessBackend"`
+	TunExcludeProcesses                string          `json:"tunExcludeProcesses"`
+	SsBackend                          string          `json:"ssBackend"`
+	TrojanBackend                      string          `json:"trojanBackend"`
 }
 
 func NewSetting() (setting *Setting) {
 	return &Setting{
+		LogLevel:                           "info",
 		RulePortMode:                       WhitelistMode,
 		ProxyModeWhenSubscribe:             ProxyModeDirect,
 		GFWListAutoUpdateMode:              NotAutoUpdate,
@@ -41,9 +52,9 @@ func NewSetting() (setting *Setting) {
 		Transparent:                        TransparentClose,
 		IpForward:                          ipforward.IsIpForwardOn(),
 		PortSharing:                        false,
-		SpecialMode:                        SpecialModeNone,
 		TransparentType:                    TransparentRedirect,
-		AntiPollution:                      AntipollutionClosed,
+		TproxyExcludedInterfaces:           "docker*,veth*,wg*,ppp*,br-*",
+		TunAutoRoute:                       true,
 	}
 }
 

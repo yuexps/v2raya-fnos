@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/v2rayA/v2rayA/conf"
+	"github.com/v2rayA/v2rayA/pkg/util/log"
 
 	"github.com/v2rayA/v2rayA/common"
 	"github.com/v2rayA/v2rayA/common/httpClient"
@@ -27,7 +28,7 @@ func PluginManagerValidateLink(url string) bool {
 }
 
 func Import(url string, which *configure.Which) (err error) {
-	//log.Trace(url)
+	log.Trace("Import: received url=%v, which=%+v", url, which)
 	resolv.CheckResolvConf()
 	url = strings.TrimSpace(url)
 	if lines := strings.Split(url, "\n"); len(lines) >= 2 || strings.HasPrefix(url, "{") {
@@ -41,36 +42,50 @@ func Import(url string, which *configure.Which) (err error) {
 		return err
 	}
 	supportedPrefix := []string{"vmess", "vless", "ss", "ssr", "trojan", "trojan-go", "http-proxy",
-		"https-proxy", "socks5", "http2", "juicity", "tuic"}
+		"https-proxy", "socks5", "http2", "juicity", "tuic", "hysteria", "hysteria2", "anytls",
+		"shadowsocks", "shadowsocksr", "hy1", "hy2", "mcore", "mcp", "plugin", "wireguard"}
 	for i := range supportedPrefix {
 		supportedPrefix[i] += "://"
 	}
-	if PluginManagerValidateLink(url) || common.HasAnyPrefix(url, supportedPrefix) {
+	urlLower := strings.ToLower(url)
+	if PluginManagerValidateLink(url) || common.HasAnyPrefix(urlLower, supportedPrefix) {
+		log.Trace("Import: url matches supported prefixes or is valid for PluginManager")
 		var obj serverObj.ServerObj
 		obj, err = ResolveURL(url)
 		if err != nil {
+			log.Warn("ResolveURL failed: %v", err)
 			return
 		}
-		if which != nil {
+		if which != nil && which.ID > 0 {
 			// the request is to modify a server
 			ind := which.ID - 1
-			if which.TYPE != configure.ServerType || ind < 0 || ind >= configure.GetLenServers() {
-				return fmt.Errorf("bad request")
+			log.Info("Import: modifying server. ind=%v, which.ID=%v, which.TYPE=%v", ind, which.ID, which.TYPE)
+			if which.TYPE != configure.ServerType {
+				// Also support modifying subscription servers if the frontend allows it
+				// but for now, we primarily care about ServerType
+				if which.TYPE != configure.SubscriptionServerType {
+					log.Warn("Import: unsupported touch type for modification: %v", which.TYPE)
+					return fmt.Errorf("bad request: unsupported touch type")
+				}
 			}
-			var sr *configure.ServerRaw
-			sr, err = which.LocateServerRaw()
-			if err != nil {
-				return
+
+			if which.TYPE == configure.ServerType && (ind < 0 || ind >= configure.GetLenServers()) {
+				log.Warn("Import: invalid server index: %v", ind)
+				return fmt.Errorf("bad request: invalid index")
 			}
-			sr.ServerObj = obj
+
 			if err = configure.SetServer(ind, &configure.ServerRaw{ServerObj: obj}); err != nil {
+				log.Warn("Import: SetServer failed: %v", err)
 				return
 			}
+			log.Info("Import: SetServer success for index %v", ind)
 			css := configure.GetConnectedServers()
 			if css.Len() > 0 {
 				for _, cs := range css.Get() {
 					if which.TYPE == cs.TYPE && which.ID == cs.ID {
+						log.Info("Import: updating connected v2ray config")
 						if err = v2ray.UpdateV2RayConfig(); err != nil {
+							log.Warn("Import: UpdateV2RayConfig failed: %v", err)
 							return
 						}
 					}
@@ -78,6 +93,7 @@ func Import(url string, which *configure.Which) (err error) {
 			}
 		} else {
 			// append a server
+			log.Info("Import: appending a new server")
 			err = configure.AppendServers([]*configure.ServerRaw{{ServerObj: obj}})
 		}
 	} else {
@@ -108,17 +124,16 @@ func Import(url string, which *configure.Which) (err error) {
 			servers[i] = configure.ServerRaw{ServerObj: v}
 		}
 
-		// deduplicate
-		unique := make(map[configure.ServerRaw]interface{})
+		// deduplicate using address as key since ServerRaw contains non-comparable fields
+		seen := make(map[string]struct{})
+		uniqueServers := make([]configure.ServerRaw, 0, len(servers))
 		for _, s := range servers {
-			unique[s] = nil
-		}
-		uniqueServers := make([]configure.ServerRaw, 0)
-		for _, s := range servers {
-			if _, ok := unique[s]; ok {
-				uniqueServers = append(uniqueServers, s)
-				delete(unique, s)
+			key := s.ServerObj.GetHostname() + ":" + fmt.Sprintf("%d", s.ServerObj.GetPort())
+			if _, ok := seen[key]; ok {
+				continue
 			}
+			seen[key] = struct{}{}
+			uniqueServers = append(uniqueServers, s)
 		}
 		err = configure.AppendSubscriptions([]*configure.SubscriptionRaw{{
 			Address: source,

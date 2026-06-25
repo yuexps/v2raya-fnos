@@ -7,7 +7,6 @@
     </header>
     <section class="modal-card-body">
       <b-field
-        v-if="false"
         :label="$t('customAddressPort.serviceAddress')"
         label-position="on-border"
       >
@@ -16,8 +15,8 @@
           v-model="table.backendAddress"
           placeholder="http://localhost:2017"
           pattern="https?://.+(:\d+)?"
+          disabled
         >
-          >
         </b-input>
       </b-field>
       <template v-if="backendReady && dockerMode === false && !addressChanged">
@@ -142,14 +141,22 @@
         </b-message>
       </template>
     </section>
-    <footer class="modal-card-foot flex-end">
-      <button class="button" @click="$emit('close')">
-        {{ $t("operations.cancel") }}
-      </button>
-      <button class="button is-primary" @click="handleClickSubmit">
-        {{ $t("operations.confirm") }}
-      </button>
+    <footer class="modal-card-foot" style="justify-content: space-between">
+      <b-button outlined type="is-info" icon-left="plus" @click="showCustomInbound = true">
+        {{ $t("customInbound.title") }}
+      </b-button>
+      <div>
+        <button class="button" @click="$emit('close')">
+          {{ $t("operations.cancel") }}
+        </button>
+        <button class="button is-primary" style="margin-left: 0.5rem" @click="handleClickSubmit">
+          {{ $t("operations.confirm") }}
+        </button>
+      </div>
     </footer>
+    <b-modal :active.sync="showCustomInbound" has-modal-card trap-focus>
+      <ModalCustomInbound @close="showCustomInbound = false" />
+    </b-modal>
   </div>
 </template>
 
@@ -157,11 +164,13 @@
 import CONST from "@/assets/js/const";
 import { handleResponse } from "@/assets/js/utils";
 import ModalSharing from "@/components/modalSharing";
+import ModalCustomInbound from "@/components/modalCustomInbound";
 import i18n from "@/plugins/i18n";
 
 export default {
   name: "ModalCustomPorts",
   i18n,
+  components: { ModalCustomInbound },
   data: () => ({
     table: {
       backendAddress: "http://localhost:2017",
@@ -177,13 +186,18 @@ export default {
       },
     },
     backendReady: false,
+    showCustomInbound: false,
   }),
   computed: {
     dockerMode() {
       return window.localStorage["docker"] === "true";
     },
     addressChanged() {
-      return false;
+      let backendAddress = this.table.backendAddress;
+      if (backendAddress.endsWith("/")) {
+        backendAddress = backendAddress.substr(0, backendAddress.length - 1);
+      }
+      return backendAddress + "/api" !== apiRoot;
     },
     supportedService() {
       const origin = ["HandlerService", "LoggerService", "StatsService"];
@@ -226,10 +240,7 @@ export default {
       }
     },
     handleClickSubmit() {
-      if (
-        this.$refs.backendAddress &&
-        !this.$refs.backendAddress.checkHtml5Validity()
-      ) {
+      if (!this.$refs.backendAddress.checkHtml5Validity()) {
         return;
       }
       //去除末位'/'
@@ -240,7 +251,7 @@ export default {
       //当前服务端是否正常工作
       if (this.backendReady && !this.addressChanged) {
         this.$axios({
-          url: backendAddress + "/app/v2raya/api/ports",
+          url: backendAddress + "/api/ports",
           method: "put",
           data: {
             socks5: parseInt(this.table.socks5),
@@ -273,7 +284,7 @@ export default {
         });
       } else {
         this.$axios({
-          url: backendAddress + "/app/v2raya/api/version",
+          url: backendAddress + "/api/version",
         }).then(() => {
           localStorage["backendAddress"] = backendAddress;
           this.$emit("close");

@@ -2,46 +2,39 @@ package v2ray
 
 import (
 	"fmt"
-	"net/netip"
 	"strings"
 	"time"
 
 	"github.com/v2rayA/v2rayA/conf"
 	"github.com/v2rayA/v2rayA/core/iptables"
-	"github.com/v2rayA/v2rayA/core/specialMode"
-	"github.com/v2rayA/v2rayA/core/tun"
 	"github.com/v2rayA/v2rayA/db/configure"
 	"github.com/v2rayA/v2rayA/pkg/util/log"
 )
 
 func deleteTransparentProxyRules() {
+	stopTinyTun()
 	iptables.CloseWatcher()
 	if !conf.GetEnvironmentConfig().Lite {
 		removeResolvHijacker()
 		iptables.Tproxy.GetCleanCommands().Run(false)
 		iptables.Redirect.GetCleanCommands().Run(false)
 		iptables.DropSpoofing.GetCleanCommands().Run(false)
-		tun.Default.Close()
 	}
 	iptables.SystemProxy.GetCleanCommands().Run(false)
 	time.Sleep(30 * time.Millisecond)
 }
 
-func writeTransparentProxyRules() (err error) {
+func writeTransparentProxyRules(tmpl *Template) (err error) {
 	defer func() {
 		if err != nil {
 			log.Warn("writeTransparentProxyRules: %v", err)
 			deleteTransparentProxyRules()
 		}
 	}()
-	if specialMode.ShouldUseSupervisor() {
-		if err = iptables.DropSpoofing.GetSetupCommands().Run(true); err != nil {
-			log.Warn("DropSpoofing can't be enable: %v", err)
-			return err
-		}
-	}
 	setting := configure.GetSettingNotNil()
 	switch setting.TransparentType {
+	case configure.TransparentTun:
+		return startTinyTun(tmpl)
 	case configure.TransparentTproxy:
 		if err = iptables.Tproxy.GetSetupCommands().Run(true); err != nil {
 			if strings.Contains(err.Error(), "TPROXY") && strings.Contains(err.Error(), "No chain") {
@@ -55,20 +48,6 @@ func writeTransparentProxyRules() (err error) {
 			return fmt.Errorf("not support \"redirect\" mode of transparent proxy: %w", err)
 		}
 		iptables.SetWatcher(iptables.Redirect)
-	case configure.TransparentGvisorTun, configure.TransparentSystemTun:
-		mode, _, _ := strings.Cut(string(setting.TransparentType), "_")
-		if err = tun.Default.Start(tun.Stack(mode)); err != nil {
-			return fmt.Errorf("not support \"%s tun\" mode of transparent proxy: %w", mode, err)
-		}
-		_, serverInfos, _ := getConnectedServerObjs()
-		for _, info := range serverInfos {
-			host := info.Info.GetHostname()
-			if addr, err := netip.ParseAddr(host); err == nil {
-				tun.Default.AddIPWhitelist(addr)
-			} else {
-				tun.Default.AddDomainWhitelist(host)
-			}
-		}
 	case configure.TransparentSystemProxy:
 		if err = iptables.SystemProxy.GetSetupCommands().Run(true); err != nil {
 			return fmt.Errorf("not support \"system proxy\" mode of transparent proxy: %w", err)
@@ -77,14 +56,12 @@ func writeTransparentProxyRules() (err error) {
 		return fmt.Errorf("undefined \"%v\" mode of transparent proxy", setting.TransparentType)
 	}
 
-	if specialMode.ShouldLocalDnsListen() {
-		if couldListenLocalhost, e := specialMode.CouldLocalDnsListen(); couldListenLocalhost {
+	if ShouldLocalDnsListen() {
+		if couldListenLocalhost, e := CouldLocalDnsListen(); couldListenLocalhost {
 			if e != nil {
 				log.Warn("only listen at 127.2.0.17: %v", e)
 			}
 			resetResolvHijacker()
-		} else if specialMode.ShouldUseFakeDns() {
-			return fmt.Errorf("fakedns cannot be enabled: %w", e)
 		} else {
 			log.Warn("writeTransparentProxyRules: %v", e)
 		}
@@ -106,3 +83,4 @@ func IsTransparentOn(setting *configure.Setting) bool {
 	}
 	return true
 }
+

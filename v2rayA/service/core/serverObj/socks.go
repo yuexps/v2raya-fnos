@@ -59,30 +59,25 @@ func ParseSocksURL(u string) (data *SOCKS, err error) {
 }
 
 func (h *SOCKS) Configuration(info PriorInfo) (c Configuration, err error) {
-	var users []coreObj.OutboundUser
-	if h.Username != "" && h.Password != "" {
-		users = []coreObj.OutboundUser{
-			{
-				User: h.Username,
-				Pass: h.Password,
-			},
+	// socks5 is natively supported by v2ray/xray core; use a direct outbound
+	// instead of routing through the daeuniverse/outbound plugin chain.
+	servers := []coreObj.Server{
+		{Address: h.Server, Port: h.Port},
+	}
+	if h.Username != "" {
+		servers[0].Users = []coreObj.OutboundUser{
+			{User: h.Username, Pass: h.Password},
 		}
 	}
-	o := coreObj.OutboundObject{
-		Tag:      info.Tag,
-		Protocol: "socks",
-		Settings: coreObj.Settings{
-			Servers: []coreObj.Server{{
-				Address: h.Server,
-				Port:    h.Port,
-				Users:   users,
-			}},
-		},
-	}
 	return Configuration{
-		CoreOutbound: o,
-		PluginChain:  "",
-		UDPSupport:   true,
+		CoreOutbound: coreObj.OutboundObject{
+			Tag:      info.Tag,
+			Protocol: "socks",
+			Settings: coreObj.Settings{
+				Servers: servers,
+			},
+		},
+		UDPSupport: true,
 	}, nil
 }
 

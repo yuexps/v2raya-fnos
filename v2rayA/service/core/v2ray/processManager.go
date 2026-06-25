@@ -8,7 +8,6 @@ import (
 
 	"github.com/v2rayA/v2rayA/common/resolv"
 	"github.com/v2rayA/v2rayA/conf"
-	"github.com/v2rayA/v2rayA/core/specialMode"
 	"github.com/v2rayA/v2rayA/core/v2ray/asset"
 	"github.com/v2rayA/v2rayA/db/configure"
 	"github.com/v2rayA/v2rayA/pkg/util/log"
@@ -23,7 +22,6 @@ var ProcessManager CoreProcessManager
 
 func (m *CoreProcessManager) beforeStop(p *Process) {
 	m.CheckAndStopTransparentProxy(p.template.Setting)
-	specialMode.StopDNSSupervisor()
 
 	if corehook := conf.GetEnvironmentConfig().CoreHook; corehook != "" {
 		hook := strings.Split(corehook, " ")
@@ -49,7 +47,7 @@ func (m *CoreProcessManager) GetRunningTemplate() *Template {
 	return m.p.template
 }
 
-func (m *CoreProcessManager) CheckAndSetupTransparentProxy(checkRunning bool, setting *configure.Setting) (err error) {
+func (m *CoreProcessManager) CheckAndSetupTransparentProxy(checkRunning bool, setting *configure.Setting, tmpl *Template) (err error) {
 	if setting != nil {
 		setting.FillEmpty()
 	} else {
@@ -74,7 +72,7 @@ func (m *CoreProcessManager) CheckAndSetupTransparentProxy(checkRunning bool, se
 			}
 		}
 
-		err = writeTransparentProxyRules()
+		err = writeTransparentProxyRules(tmpl)
 
 		if thook := conf.GetEnvironmentConfig().TransparentHook; thook != "" {
 			hook := strings.Split(thook, " ")
@@ -162,12 +160,6 @@ func (m *CoreProcessManager) Stop(saveRunning bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.stop(saveRunning)
-	if m.p != nil {
-		for _, pm := range m.p.pluginManagers {
-			_ = pm.Kill()
-		}
-		m.p.pluginManagers = nil
-	}
 }
 
 func (m *CoreProcessManager) stop(saveRunning bool) {
@@ -175,9 +167,11 @@ func (m *CoreProcessManager) stop(saveRunning bool) {
 		return
 	}
 
-	m.beforeStop(m.p)
+	p := m.p
 
-	err := m.p.Close()
+	m.beforeStop(p)
+
+	err := p.Close()
 	if err != nil {
 		log.Warn("CoreProcessManager.Stop: %v", err)
 	}
@@ -185,9 +179,21 @@ func (m *CoreProcessManager) stop(saveRunning bool) {
 		configure.SetRunning(false)
 	}
 
-	m.afterStop(m.p)
+	m.afterStop(p)
 
 	m.p = nil
+
+	// Notify connected frontend clients that the proxy is no longer running.
+	ApiFeed.ProductMessage("running_state", map[string]interface{}{"running": false})
+}
+
+func (m *CoreProcessManager) handleUnexpectedStop(p *Process) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.p != p {
+		return
+	}
+	m.stop(true)
 }
 
 func (m *CoreProcessManager) beforeStart(t *Template) (err error) {
@@ -217,10 +223,9 @@ func (m *CoreProcessManager) beforeStart(t *Template) (err error) {
 }
 
 func (m *CoreProcessManager) afterStart(t *Template) (err error) {
-	if err = m.CheckAndSetupTransparentProxy(false, t.Setting); err != nil {
+	if err = m.CheckAndSetupTransparentProxy(false, t.Setting, t); err != nil {
 		return err
 	}
-	specialMode.CheckAndSetupDNSSupervisor()
 
 	if corehook := conf.GetEnvironmentConfig().CoreHook; corehook != "" {
 		hook := strings.Split(corehook, " ")
@@ -247,10 +252,7 @@ func (m *CoreProcessManager) Start(t *Template) (err error) {
 		return m.beforeStart(t)
 	}, func() error {
 		return m.afterStart(t)
-	}, func(p *Process) {
-		m.beforeStop(p)
-		m.afterStop(p)
-	})
+	}, m.handleUnexpectedStop)
 	if err != nil {
 		return err
 	}
@@ -271,5 +273,7 @@ func (m *CoreProcessManager) Running() bool {
 }
 
 func (m *CoreProcessManager) Process() *Process {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return m.p
 }

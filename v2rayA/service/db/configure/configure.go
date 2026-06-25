@@ -22,8 +22,7 @@ type Configure struct {
 	Setting             *Setting            `json:"setting"`
 	Accounts            map[string]string   `json:"accounts"`
 	Ports               Ports               `json:"ports"`
-	InternalDnsList     *string             `json:"internalDnsList"`
-	ExternalDnsList     *string             `json:"externalDnsList"`
+	DnsRules            []DnsRule           `json:"dnsRules"`
 	RoutingA            *string             `json:"routingA"`
 	DomainsExcluded     *string             `json:"domainsExcluded"`
 	TproxyWhiteIpGroups TproxyWhiteIpGroups `json:"tproxyWhiteIpGroups"`
@@ -37,14 +36,12 @@ func New() *Configure {
 		Setting:          NewSetting(),
 		Accounts:         map[string]string{},
 		Ports: Ports{
-			Socks5:        20170,
+			Socks5:        0,
 			Socks5WithPac: 0,
-			Http:          20171,
+			Http:          0,
 			HttpWithPac:   20172,
 			Vmess:         0,
 		},
-		InternalDnsList: nil,
-		ExternalDnsList: nil,
 		RoutingA:        nil,
 		DomainsExcluded: nil,
 	}
@@ -94,11 +91,10 @@ func SetConfigure(cfg *Configure) error {
 	if err := SetRoutingA(cfg.RoutingA); err != nil {
 		return err
 	}
-	if err := SetInternalDnsList(cfg.InternalDnsList); err != nil {
-		return err
-	}
-	if err := SetExternalDnsList(cfg.ExternalDnsList); err != nil {
-		return err
+	if cfg.DnsRules != nil {
+		if err := SetDnsRules(cfg.DnsRules); err != nil {
+			return err
+		}
 	}
 	if err := OverwriteConnects(NewWhiches(cfg.ConnectedServers)); err != nil {
 		return err
@@ -130,18 +126,6 @@ func SetSetting(setting *Setting) (err error) {
 }
 func SetPorts(ports *Ports) (err error) {
 	return db.Set("system", "ports", ports)
-}
-func SetInternalDnsList(dnsList *string) (err error) {
-	if dnsList == nil {
-		return db.Set("system", "internalDnsList", nil)
-	}
-	return db.Set("system", "internalDnsList", strings.TrimSpace(*dnsList))
-}
-func SetExternalDnsList(dnsList *string) (err error) {
-	if dnsList == nil {
-		return db.Set("system", "externalDnsList", nil)
-	}
-	return db.Set("system", "externalDnsList", strings.TrimSpace(*dnsList))
 }
 func SetRoutingA(routingA *string) (err error) {
 	return db.Set("system", "routingA", routingA)
@@ -210,9 +194,6 @@ func GetSettingNotNil() *Setting {
 		_ = jsoniter.Unmarshal(b, r)
 	}
 	_ = common.FillEmpty(r, NewSetting())
-	if r.SpecialMode == "" {
-		r.SpecialMode = SpecialModeNone
-	}
 	if r.TransparentType == "" {
 		r.TransparentType = TransparentRedirect
 	}
@@ -223,37 +204,14 @@ func GetPortsNotNil() *Ports {
 	_ = db.Get("system", "ports", &p)
 	if p == nil {
 		p = new(Ports)
-		p.Socks5 = 20170
-		p.Http = 20171
+		p.Socks5 = 0
+		p.Http = 0
 		p.Socks5WithPac = 0
 		p.HttpWithPac = 20172
 		p.Vmess = 0
 		p.Api = ApiPort{Port: 0}
 	}
 	return p
-}
-func GetExternalDnsListNotNil() (list []string) {
-	r := new(string)
-	_ = db.Get("system", "externalDnsList", r)
-	list = strings.Split(strings.TrimSpace(*r), "\n")
-	if len(list) == 1 && list[0] == "" {
-		return []string{}
-	}
-	return
-}
-func GetInternalDnsListNotNil() (list []string) {
-	r := new(string)
-	_ = db.Get("system", "internalDnsList", r)
-	if len(strings.TrimSpace(*r)) == 0 {
-		*r = `https://dns.alidns.com/dns-query -> direct
-tcp://dns.opendns.com:5353 -> proxy
-119.29.29.29 -> direct`
-	}
-	list = strings.Split(strings.TrimSpace(*r), "\n")
-	if len(list) == 1 && list[0] == "" {
-		return []string{}
-	}
-	return
 }
 func GetCustomPacNotNil() *CustomPac {
 	r := new(CustomPac)
@@ -352,7 +310,11 @@ func AddConnect(wt Which) (err error) {
 	bucket := fmt.Sprintf("outbound.%v", wt.Outbound)
 	var wcs Whiches
 	_ = db.Get(bucket, "connectedServers", &wcs)
+	// Normalize Outbound field of existing entries for consistent comparison
 	for _, v := range wcs.Get() {
+		if v.Outbound == "" {
+			v.Outbound = "proxy"
+		}
 		if v.EqualTo(wt) {
 			return nil
 		}
@@ -385,6 +347,12 @@ func RemoveConnect(wt Which) (err error) {
 	bucket := fmt.Sprintf("outbound.%v", wt.Outbound)
 	var wcs Whiches
 	_ = db.Get(bucket, "connectedServers", &wcs)
+	// Normalize Outbound field of existing entries for consistent comparison
+	for _, v := range wcs.Touches {
+		if v.Outbound == "" {
+			v.Outbound = "proxy"
+		}
+	}
 	for i, v := range wcs.Touches {
 		if v.EqualTo(wt) {
 			wcs.Touches = append(wcs.Touches[:i], wcs.Touches[i+1:]...)
@@ -398,11 +366,30 @@ func GetOutbounds() (outbounds []string) {
 	// keep order
 	members, _ := db.StringSetGetAll("outbounds", "names")
 	for _, m := range members {
-		outbounds = append(outbounds, m)
+		if m != "proxy" {
+			outbounds = append(outbounds, m)
+		}
 	}
 	sort.Strings(outbounds)
+	// "proxy" is always the first outbound.
 	outbounds = append([]string{"proxy"}, outbounds...)
 	return
+}
+
+// InitDefaultOutbound ensures the default "proxy" outbound group exists in the database.
+// It should be called during system initialization.
+func InitDefaultOutbound() error {
+	members, err := db.StringSetGetAll("outbounds", "names")
+	if err != nil {
+		// bucket doesn't exist yet, create it with the default
+		return db.SetAdd("outbounds", "names", DefaultOutboundName)
+	}
+	for _, m := range members {
+		if m == DefaultOutboundName {
+			return nil // already exists
+		}
+	}
+	return db.SetAdd("outbounds", "names", DefaultOutboundName)
 }
 
 func AddOutbound(outbound string) (err error) {
@@ -411,7 +398,11 @@ func AddOutbound(outbound string) (err error) {
 		outbound == "block" {
 		return fmt.Errorf("cannot add %v as the outbound name", outbound)
 	}
-	return db.SetAdd("outbounds", "names", outbound)
+	if err = db.SetAdd("outbounds", "names", outbound); err != nil {
+		return err
+	}
+	// Apply default OutboundSetting for the new outbound group
+	return SetOutboundSetting(outbound, DefaultOutboundSetting())
 }
 
 func SetOutboundSetting(outbound string, setting OutboundSetting) (err error) {
@@ -424,11 +415,7 @@ func SetOutboundSetting(outbound string, setting OutboundSetting) (err error) {
 func GetOutboundSetting(outbound string) (setting OutboundSetting) {
 	err := db.Get(fmt.Sprintf("outbound.%v", outbound), "setting", &setting)
 	if err != nil {
-		return OutboundSetting{
-			ProbeURL:      "https://gstatic.com/generate_204",
-			ProbeInterval: "10s",
-			Type:          LeastPing,
-		}
+		return DefaultOutboundSetting()
 	}
 	return setting
 }
@@ -444,14 +431,27 @@ func SetAccount(username, password string) (err error) {
 	return db.Set("accounts", username, password)
 }
 func ResetAccounts() (err error) {
-	return db.BucketClear("accounts")
+	accounts, err := GetAccounts()
+	if err != nil {
+		return err
+	}
+	for _, account := range accounts {
+		if err = db.Delete("accounts", account[0]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 func ExistsAccount(username string) bool {
-	return db.Exists("accounts", username)
+	pwd, err := GetPasswordOfAccount(username)
+	return err == nil && isAccountPasswordHash(pwd)
 }
 
 func GetPasswordOfAccount(username string) (pwd string, err error) {
 	err = db.Get("accounts", username, &pwd)
+	if err == nil && !isAccountPasswordHash(pwd) {
+		return "", fmt.Errorf("account not found")
+	}
 	return
 }
 
@@ -463,14 +463,27 @@ func GetAccounts() (accounts [][2]string, err error) {
 	for _, uname := range unames {
 		var passwd string
 		err = db.Get("accounts", uname, &passwd)
+		if err != nil || !isAccountPasswordHash(passwd) {
+			continue
+		}
 		accounts = append(accounts, [2]string{uname, passwd})
 	}
 	return accounts, nil
 }
 
 func HasAnyAccounts() bool {
-	l, err := db.GetBucketLen("accounts")
-	return err == nil && l > 0
+	accounts, err := GetAccounts()
+	return err == nil && len(accounts) > 0
+}
+
+func isAccountPasswordHash(passwordHash string) bool {
+	if len(passwordHash) == 32 {
+		_, err := hex.DecodeString(passwordHash)
+		return err == nil
+	}
+	return strings.HasPrefix(passwordHash, "$2a$") ||
+		strings.HasPrefix(passwordHash, "$2b$") ||
+		strings.HasPrefix(passwordHash, "$2y$")
 }
 
 func SetRunning(running bool) (err error) {

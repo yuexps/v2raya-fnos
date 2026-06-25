@@ -37,7 +37,7 @@ module.exports = {
       },
       plugins: [
         new webpack.DefinePlugin({
-          'apiRoot': '`${(localStorage["backendAddress"] ? (localStorage["backendAddress"].endsWith("/") ? localStorage["backendAddress"].slice(0, -1) : localStorage["backendAddress"]) : "") + "/app/v2raya/api"}`',
+          apiRoot: '`${localStorage["backendAddress"]}/api`',
         }),
         new WebpackIconfontPluginNodejs({
           cssPrefix: "icon",
@@ -62,8 +62,8 @@ module.exports = {
   // publicPath: "./static/",
   publicPath:
     process.env.publicPath ||
-    (process.env.NODE_ENV === "production" ? "/app/v2raya/static/" : "/"),
-  outputDir: process.env.OUTPUT_DIR || "../service/server/router/web",
+    (process.env.NODE_ENV === "production" ? "./static/" : "/"),
+  outputDir: process.env.OUTPUT_DIR || "../web",
 
   // pwa: {
   //   name: "v2rayA",
