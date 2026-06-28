@@ -1,13 +1,12 @@
 appname         = v2raya
 version         = 26.6.25
 desc            = v2rayA 是一个支持全局透明代理的 V2Ray 客户端，提供 Web 界面管理。
-platform        = arm
+platform        = all
 maintainer      = v2rayA
 maintainer_url  = https://github.com/yuexps/v2raya-fnos
 distributor     = yuexps
 os_min_version  = 1.1.3100
 display_name    = v2rayA
 desktop_uidir   = ui
-desktop_applaunchname = v2raya.Application
 source          = thirdparty
-changelog       = Update to v2raya_core 2.4.0
+desktop_applaunchname = v2raya.Application

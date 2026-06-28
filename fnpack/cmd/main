@@ -29,7 +29,7 @@ esac
 # 内核与服务路径配置
 CORE_TYPE="v2raya_core"
 CORE_BIN="${TRIM_APPDEST}/${ARCH}/${CORE_TYPE}"
-V2RAYA_BIN="${TRIM_APPDEST}/${ARCH}/v2raya_sock"
+V2RAYA_BIN="${TRIM_APPDEST}/${ARCH}/v2raya"
 CORE_ASSETSDIR="${TRIM_APPDEST}/geo"
 SOCK_FILE="${TRIM_APPDEST}/v2raya.sock"
 
