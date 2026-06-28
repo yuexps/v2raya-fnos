@@ -230,7 +230,7 @@ jobs:
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
         
-        git add fnpack/manifest fnpack/app/geo/ VERSION
+        git add fnpack/manifest fnpack/app/ VERSION
         
         DATE_VERSION="${{ steps.check.outputs.version }}"
         COMMIT_MSG="chore: auto update manifest and geo to version ${DATE_VERSION} [skip ci]"
