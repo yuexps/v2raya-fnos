@@ -1,19 +1,18 @@
 # v2rayA for fnOS
 
-A deeply integrated v2rayA application for fnOS.
+v2rayA application package for fnOS.
 
 ## Features
 
-- **Native Unix Socket Integration**: Uses Unix Domain Socket for backend communication, ensuring ZERO TCP port occupation for the management interface.
-- **Full Architecture Support**: Compatible with both **x86_64** and **ARM64** platforms.
-- **Integrated Core Support**: Powered by **v2raya_core** (v2ray/xray hybrid core) out of the box, ensuring efficient and stable operation.
-
+- **Unix Domain Socket**: Access via the fnOS Unified Gateway using Unix Domain Socket, avoiding extra TCP port exposure.
+- **Multi-architecture**: Supports both x86_64 and arm64.
+- **Built-in Core**: Includes pre-compiled v2raya_core, ready to use out of the box.
 
 ## Access
 
-After installation, simply click the **v2rayA** icon on the fnOS desktop to access the management interface.
+After installation, open the v2rayA WebUI via the fnOS desktop shortcut.
 
 ## Resources
 
-- [fnOS](https://developer.fnnas.com/docs/guide)
-- [v2rayA](https://github.com/v2rayA/v2rayA)
+- [fnOS Developer Guide](https://developer.fnnas.com/docs/guide)
+- [v2rayA Repository](https://github.com/v2rayA/v2rayA)

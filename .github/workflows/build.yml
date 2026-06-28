@@ -202,7 +202,7 @@ jobs:
         # 删除所有旧的 pre-release 标签，保持 Release 干净
         gh release list --limit 100 --json tagName,isPrerelease | jq -r '.[] | select(.isPrerelease == true) | .tagName' | while read tag; do
           echo "Deleting old pre-release: $tag"
-          gh release delete "$tag" --yes || true
+          gh release delete "$tag" --yes --cleanup-tag || true
         done
 
     - name: Create Pre-release
