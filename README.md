@@ -8,9 +8,8 @@ v2rayA application package for fnOS.
 - **Multi-architecture**: Supports both x86_64 and arm64.
 - **Built-in Core**: Includes pre-compiled v2raya_core, ready to use out of the box.
 
-## Transparent Proxy Suggestion
- 
-It is recommended to use the tproxy transparent proxy mode for full compatibility with Docker containers, UDP, DNS and LAN traffic.
+## Transparent Proxy Tip
+If transparent proxy is required, it is recommended to use the tproxy mode for full compatibility with Docker containers, UDP, DNS and LAN traffic.
 
 ## Access
 
