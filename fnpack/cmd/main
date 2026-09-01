@@ -3,6 +3,7 @@
 # 日志与 PID 文件位置
 LOG_FILE="${TRIM_PKGVAR}/v2raya.log"
 PID_FILE="${TRIM_PKGVAR}/v2raya.pid"
+ADAPTER_PID_FILE="${TRIM_PKGVAR}/adapter.pid"
 
 # 日志函数
 log_msg() {
@@ -32,13 +33,17 @@ CORE_BIN="${TRIM_APPDEST}/${ARCH}/${CORE_TYPE}"
 V2RAYA_BIN="${TRIM_APPDEST}/${ARCH}/v2raya"
 CORE_ASSETSDIR="${TRIM_APPDEST}/geo"
 SOCK_FILE="${TRIM_APPDEST}/v2raya.sock"
+SOCK_FILE_REAL="${TRIM_APPDEST}/v2raya_real.sock"
+ADAPTER_SCRIPT="${TRIM_APPDEST}/gateway_adapter.py"
+PYTHON_BIN="/usr/bin/python3"
 
 # 检查可执行程序完整性
 [ ! -f "${CORE_BIN}" ] && error_exit "未找到核心程序: ${CORE_BIN}"
 [ ! -f "${V2RAYA_BIN}" ] && error_exit "未找到 v2rayA 主程序: ${V2RAYA_BIN}"
+[ ! -f "${ADAPTER_SCRIPT}" ] && error_exit "未找到网关适配脚本: ${ADAPTER_SCRIPT}"
 
 # 导出环境变量
-export V2RAYA_SOCKET="${SOCK_FILE}"
+export V2RAYA_SOCKET="${SOCK_FILE_REAL}"
 export V2RAY_LOCATION_ASSET="${CORE_ASSETSDIR}"
 export XRAY_LOCATION_ASSET="${CORE_ASSETSDIR}"
 export V2RAYA_CORE_TYPE="v2raya_core"
@@ -57,14 +62,21 @@ get_v2raya_pid() {
     pgrep -f "${V2RAYA_BIN}" | head -n 1
 }
 
+get_adapter_pid() {
+    pgrep -f "${ADAPTER_SCRIPT}" | head -n 1
+}
+
 # 检查状态
 status() {
-    local pid=$(get_v2raya_pid)
-    if [ -n "${pid}" ]; then
-        echo "${pid}" > "${PID_FILE}"
+    local v_pid=$(get_v2raya_pid)
+    local a_pid=$(get_adapter_pid)
+    if [ -n "${v_pid}" ] && [ -n "${a_pid}" ]; then
+        echo "${v_pid}" > "${PID_FILE}"
+        echo "${a_pid}" > "${ADAPTER_PID_FILE}"
         return 0
     fi
-    rm -f "${PID_FILE}"
+    [ -z "${v_pid}" ] && rm -f "${PID_FILE}"
+    [ -z "${a_pid}" ] && rm -f "${ADAPTER_PID_FILE}"
     return 1
 }
 
@@ -76,42 +88,58 @@ start_process() {
     fi
 
     log_msg "正在启动 v2rayA ..."
-    rm -f "${SOCK_FILE}"
+    rm -f "${SOCK_FILE}" "${SOCK_FILE_REAL}"
 
-    # 后台运行
     nohup "${V2RAYA_BIN}" ${CMD_ARGS} >> "${LOG_FILE}" 2>&1 &
-    sleep 1
+    
+    local count=0
+    while [ ! -S "${SOCK_FILE_REAL}" ] && [ $count -lt 10 ]; do
+        sleep 0.5
+        ((count++))
+    done
 
-    local new_pid=$(get_v2raya_pid)
-    if [ -n "${new_pid}" ]; then
-        echo "${new_pid}" > "${PID_FILE}"
-        log_msg "v2rayA 已启动 (Unix Socket)，PID: ${new_pid}"
+    local new_vpid=$(get_v2raya_pid)
+    if [ -z "${new_vpid}" ]; then
+        error_exit "v2rayA 启动失败，请检查日志: ${LOG_FILE}"
+    fi
+    echo "${new_vpid}" > "${PID_FILE}"
+    log_msg "v2rayA 已启动 (Unix Socket)，PID: ${new_vpid}"
+
+    nohup "${PYTHON_BIN}" "${ADAPTER_SCRIPT}" --listen "${SOCK_FILE}" --target "${SOCK_FILE_REAL}" >> "${LOG_FILE}" 2>&1 &
+    
+    count=0
+    while [ ! -S "${SOCK_FILE}" ] && [ $count -lt 10 ]; do
+        sleep 0.5
+        ((count++))
+    done
+
+    local new_apid=$(get_adapter_pid)
+    if [ -n "${new_apid}" ]; then
+        echo "${new_apid}" > "${ADAPTER_PID_FILE}"
+        chmod 666 "${SOCK_FILE}" 2>/dev/null || true
         return 0
     else
-        error_exit "v2rayA 启动失败，请检查日志: ${LOG_FILE}"
+        error_exit "网关适配器启动失败，请检查日志: ${LOG_FILE}"
     fi
 }
 
 # 停止进程
 stop_process() {
     log_msg "正在停止 v2rayA ..."
+    local a_pid=$(get_adapter_pid)
     local v_pid=$(get_v2raya_pid)
-    
-    if [ -z "${v_pid}" ]; then
-        log_msg "未发现正在运行的进程"
-        rm -f "${PID_FILE}"
-        return 0
-    fi
 
-    kill -TERM "${v_pid}"
-    
+    [ -n "${a_pid}" ] && kill -TERM "${a_pid}" 2>/dev/null || true
+    [ -n "${v_pid}" ] && kill -TERM "${v_pid}" 2>/dev/null || true
+
     local count=0
     while [ $count -lt 10 ]; do
         v_pid=$(get_v2raya_pid)
-        if [ -z "${v_pid}" ]; then
+        a_pid=$(get_adapter_pid)
+        if [ -z "${v_pid}" ] && [ -z "${a_pid}" ]; then
             log_msg "v2rayA 已停止"
-            rm -f "${PID_FILE}"
-            rm -f "${SOCK_FILE}"
+            rm -f "${PID_FILE}" "${ADAPTER_PID_FILE}"
+            rm -f "${SOCK_FILE}" "${SOCK_FILE_REAL}"
             return 0
         fi
         sleep 1
@@ -119,13 +147,15 @@ stop_process() {
     done
 
     v_pid=$(get_v2raya_pid)
-    if [ -n "${v_pid}" ]; then
-        log_msg "进程未响应，正在强制关闭 v2rayA (SIGKILL) PID: ${v_pid}"
-        kill -9 "${v_pid}"
+    a_pid=$(get_adapter_pid)
+    if [ -n "${v_pid}" ] || [ -n "${a_pid}" ]; then
+        log_msg "进程未响应，正在强制关闭 v2rayA (SIGKILL)"
+        [ -n "${v_pid}" ] && kill -9 "${v_pid}" 2>/dev/null || true
+        [ -n "${a_pid}" ] && kill -9 "${a_pid}" 2>/dev/null || true
     fi
-    
-    rm -f "${PID_FILE}"
-    rm -f "${SOCK_FILE}"
+
+    rm -f "${PID_FILE}" "${ADAPTER_PID_FILE}"
+    rm -f "${SOCK_FILE}" "${SOCK_FILE_REAL}"
     return 0
 }
 

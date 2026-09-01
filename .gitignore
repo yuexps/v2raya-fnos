@@ -1,3 +1,7 @@
 # 打包产物
 *.fpk
 fnpack.exe
+
+# Python 缓存
+__pycache__/
+*.pyc

@@ -5,6 +5,7 @@ v2rayA application package for fnOS.
 ## Features
 
 - **Unix Domain Socket**: Access via the fnOS Unified Gateway using Unix Domain Socket, avoiding extra TCP port exposure.
+- **Gateway Auth Adapter**: Built-in zero-dependency Python adapter ensuring seamless authorization transparently through fnOS Unified Gateway.
 - **Multi-architecture**: Supports both x86_64 and arm64.
 - **Built-in Core**: Includes pre-compiled v2raya_core, ready to use out of the box.
 

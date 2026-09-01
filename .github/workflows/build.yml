@@ -5,6 +5,11 @@ on:
     - cron: '0 16 * * 4' # 每周五 00:00 运行
   workflow_dispatch:
     inputs:
+      v2raya_version:
+        description: '指定 v2rayA 版本 (例如 v2.4.6)'
+        required: false
+        default: ''
+        type: string
       create_release:
         description: '是否发布 pre'
         required: false
@@ -41,6 +46,7 @@ jobs:
     - name: Check for updates
       id: check
       env:
+        SPECIFIED_VERSION: ${{ github.event.inputs.v2raya_version || '' }}
         FORCE_BUILD: ${{ github.event.inputs.force_build || 'false' }}
       run: |
         # 初始化 VERSION
@@ -54,21 +60,31 @@ jobs:
         LOCAL_GEOIP=$(grep 'geoip_md5=' VERSION | cut -d'=' -f2 || echo "")
         LOCAL_LOYAL=$(grep 'loyalsoldier_md5=' VERSION | cut -d'=' -f2 || echo "")
         
-        # 获取官方最新正式版本号
-        LATEST_TAG=$(curl -sSL -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/repos/v2rayA/v2rayA/releases/latest | jq -r '.tag_name')
-        if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" = "null" ]; then
-          echo "获取最新版本号失败"
-          exit 1
+        # 确定目标版本
+        if [ -n "$SPECIFIED_VERSION" ]; then
+          if [[ ! "$SPECIFIED_VERSION" =~ ^v ]]; then
+            TARGET_TAG="v${SPECIFIED_VERSION}"
+          else
+            TARGET_TAG="${SPECIFIED_VERSION}"
+          fi
+          echo "使用指定 v2rayA 版本: $TARGET_TAG"
+          LATEST_TAG="${TARGET_TAG}"
+        else
+          # 获取官方最新正式版本号
+          LATEST_TAG=$(curl -sSL -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/repos/v2rayA/v2rayA/releases/latest | jq -r '.tag_name')
+          if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" = "null" ]; then
+            echo "获取最新版本号失败"
+            exit 1
+          fi
+          echo "官方最新 v2rayA 版本: $LATEST_TAG"
         fi
-        
-        echo "官方最新 v2rayA 版本: $LATEST_TAG"
         echo "本地缓存 v2rayA 版本: $LOCAL_V2RAYA"
         
         # 下载并计算最新 dat 哈希值
         mkdir -p temp_geo
         curl -sSL -o temp_geo/geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat
         curl -sSL -o temp_geo/geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat
-        curl -sSL -o temp_geo/LoyalsoldierSite.dat https://github.com/v2rayA/dist-v2ray-rules-dat/raw/refs/heads/master/geosite.dat
+        curl -sSL -o temp_geo/LoyalsoldierSite.dat https://github.com/v2rayA/dist-v2rayA-rules-dat/raw/refs/heads/master/geosite.dat 2>/dev/null || curl -sSL -o temp_geo/LoyalsoldierSite.dat https://github.com/v2rayA/dist-v2ray-rules-dat/raw/refs/heads/master/geosite.dat
         
         NEW_GEOSITE=$(md5sum temp_geo/geosite.dat | cut -d' ' -f1)
         NEW_GEOIP=$(md5sum temp_geo/geoip.dat | cut -d' ' -f1)
@@ -77,7 +93,10 @@ jobs:
         NEED_BUILD="false"
         
         # 检查是否需要构建
-        if [ "$FORCE_BUILD" = "true" ]; then
+        if [ -n "$SPECIFIED_VERSION" ]; then
+          echo "指定版本，强制构建"
+          NEED_BUILD="true"
+        elif [ "$FORCE_BUILD" = "true" ]; then
           echo "手动触发强制打包"
           NEED_BUILD="true"
         elif [ "$LATEST_TAG" != "$LOCAL_V2RAYA" ]; then
@@ -230,7 +249,7 @@ jobs:
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
         
-        git add fnpack/manifest fnpack/app/ VERSION
+        git add fnpack/manifest fnpack/app/geo/ VERSION
         
         DATE_VERSION="${{ steps.check.outputs.version }}"
         COMMIT_MSG="chore: auto update manifest and geo to version ${DATE_VERSION} [skip ci]"
