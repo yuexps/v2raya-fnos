@@ -82,9 +82,9 @@ jobs:
         
         # 下载并计算最新 dat 哈希值
         mkdir -p temp_geo
-        curl -sSL -o temp_geo/geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat
-        curl -sSL -o temp_geo/geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat
-        curl -sSL -o temp_geo/LoyalsoldierSite.dat https://github.com/v2rayA/dist-v2rayA-rules-dat/raw/refs/heads/master/geosite.dat 2>/dev/null || curl -sSL -o temp_geo/LoyalsoldierSite.dat https://github.com/v2rayA/dist-v2ray-rules-dat/raw/refs/heads/master/geosite.dat
+        curl -fsSL -o temp_geo/geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat
+        curl -fsSL -o temp_geo/geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat
+        curl -fsSL -o temp_geo/LoyalsoldierSite.dat https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat
         
         NEW_GEOSITE=$(md5sum temp_geo/geosite.dat | cut -d' ' -f1)
         NEW_GEOIP=$(md5sum temp_geo/geoip.dat | cut -d' ' -f1)
