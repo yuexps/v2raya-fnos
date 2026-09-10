@@ -1,5 +1,5 @@
-v2raya=v2.4.16
-geosite_md5=0ec1aee2aaf1336a642de7ed14f88d88
-geoip_md5=3b555d10417e27196006994814f315dd
-loyalsoldier_md5=b0aadfccfd1a2780c00a62b8ebece2ce
-build_version=26.9.4
+v2raya=v2.4.18
+geosite_md5=b1f98542e20f57e54e60597e9c44a2a0
+geoip_md5=180689effa44c3222c6e1f77bb9fb639
+loyalsoldier_md5=4b8daa91684c1dc34486bf8abd962921
+build_version=26.9.11
