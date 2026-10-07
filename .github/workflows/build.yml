@@ -49,16 +49,18 @@ jobs:
         SPECIFIED_VERSION: ${{ github.event.inputs.v2raya_version || '' }}
         FORCE_BUILD: ${{ github.event.inputs.force_build || 'false' }}
       run: |
+        VERSION_FILE="fnpack/app/VERSION"
+        
         # 初始化 VERSION
-        if [ ! -f VERSION ] || ! grep -q "v2raya=" VERSION; then
-          printf "v2raya=\ngeosite_md5=\ngeoip_md5=\nloyalsoldier_md5=\nbuild_version=\n" > VERSION
+        if [ ! -f "$VERSION_FILE" ] || ! grep -q "v2raya=" "$VERSION_FILE"; then
+          printf "v2raya=\ngeosite=\ngeoip=\nloyalsoldier=\nbuild_version=\n" > "$VERSION_FILE"
         fi
         
         # 读取本地缓存
-        LOCAL_V2RAYA=$(grep 'v2raya=' VERSION | cut -d'=' -f2 || echo "")
-        LOCAL_GEOSITE=$(grep 'geosite_md5=' VERSION | cut -d'=' -f2 || echo "")
-        LOCAL_GEOIP=$(grep 'geoip_md5=' VERSION | cut -d'=' -f2 || echo "")
-        LOCAL_LOYAL=$(grep 'loyalsoldier_md5=' VERSION | cut -d'=' -f2 || echo "")
+        LOCAL_V2RAYA=$(grep 'v2raya=' "$VERSION_FILE" | cut -d'=' -f2 || echo "")
+        LOCAL_GEOSITE=$(grep 'geosite=' "$VERSION_FILE" | cut -d'=' -f2 || echo "")
+        LOCAL_GEOIP=$(grep 'geoip=' "$VERSION_FILE" | cut -d'=' -f2 || echo "")
+        LOCAL_LOYAL=$(grep 'loyalsoldier=' "$VERSION_FILE" | cut -d'=' -f2 || echo "")
         
         # 确定目标版本
         if [ -n "$SPECIFIED_VERSION" ]; then
@@ -71,24 +73,30 @@ jobs:
           LATEST_TAG="${TARGET_TAG}"
         else
           # 获取官方最新正式版本号
-          LATEST_TAG=$(curl -sSL -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/repos/v2rayA/v2rayA/releases/latest | jq -r '.tag_name')
-          if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" = "null" ]; then
+          LATEST_TAG=$(curl -sSL -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/repos/v2rayA/v2rayA/releases/latest | jq -r '.tag_name // empty')
+          [ -z "$LATEST_TAG" ] && LATEST_TAG=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/v2rayA/v2rayA/releases/latest | sed -n 's|.*/tag/||p')
+          if [ -z "$LATEST_TAG" ]; then
             echo "获取最新版本号失败"
             exit 1
           fi
           echo "官方最新 v2rayA 版本: $LATEST_TAG"
         fi
-        echo "本地缓存 v2rayA 版本: $LOCAL_V2RAYA"
         
-        # 下载并计算最新 dat 哈希值
-        mkdir -p temp_geo
-        curl -fsSL -o temp_geo/geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat
-        curl -fsSL -o temp_geo/geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat
-        curl -fsSL -o temp_geo/LoyalsoldierSite.dat https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat
+        # 获取各 dat 文件的最新 release tag
+        GEOSITE_TAG=$(curl -sSL -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/repos/v2fly/domain-list-community/releases/latest | jq -r '.tag_name // empty')
+        [ -z "$GEOSITE_TAG" ] && GEOSITE_TAG=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/v2fly/domain-list-community/releases/latest | sed -n 's|.*/tag/||p')
         
-        NEW_GEOSITE=$(md5sum temp_geo/geosite.dat | cut -d' ' -f1)
-        NEW_GEOIP=$(md5sum temp_geo/geoip.dat | cut -d' ' -f1)
-        NEW_LOYAL=$(md5sum temp_geo/LoyalsoldierSite.dat | cut -d' ' -f1)
+        GEOIP_TAG=$(curl -sSL -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/repos/v2fly/geoip/releases/latest | jq -r '.tag_name // empty')
+        [ -z "$GEOIP_TAG" ] && GEOIP_TAG=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/v2fly/geoip/releases/latest | sed -n 's|.*/tag/||p')
+        
+        LOYAL_TAG=$(curl -sSL -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/repos/Loyalsoldier/v2ray-rules-dat/releases/latest | jq -r '.tag_name // empty')
+        [ -z "$LOYAL_TAG" ] && LOYAL_TAG=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest | sed -n 's|.*/tag/||p')
+        
+        echo "组件版本对比:"
+        echo "v2rayA: 本地=$LOCAL_V2RAYA, 最新=$LATEST_TAG"
+        echo "geosite.dat: 本地=$LOCAL_GEOSITE, 最新=$GEOSITE_TAG"
+        echo "geoip.dat: 本地=$LOCAL_GEOIP, 最新=$GEOIP_TAG"
+        echo "LoyalsoldierSite.dat: 本地=$LOCAL_LOYAL, 最新=$LOYAL_TAG"
         
         NEED_BUILD="false"
         
@@ -102,13 +110,13 @@ jobs:
         elif [ "$LATEST_TAG" != "$LOCAL_V2RAYA" ]; then
           echo "v2rayA 有更新"
           NEED_BUILD="true"
-        elif [ "$NEW_GEOSITE" != "$LOCAL_GEOSITE" ]; then
+        elif [ "$GEOSITE_TAG" != "$LOCAL_GEOSITE" ]; then
           echo "geosite.dat 有更新"
           NEED_BUILD="true"
-        elif [ "$NEW_GEOIP" != "$LOCAL_GEOIP" ]; then
+        elif [ "$GEOIP_TAG" != "$LOCAL_GEOIP" ]; then
           echo "geoip.dat 有更新"
           NEED_BUILD="true"
-        elif [ "$NEW_LOYAL" != "$LOCAL_LOYAL" ]; then
+        elif [ "$LOYAL_TAG" != "$LOCAL_LOYAL" ]; then
           echo "LoyalsoldierSite.dat 有更新"
           NEED_BUILD="true"
         fi
@@ -116,20 +124,25 @@ jobs:
         # 更新 VERSION 并准备打包文件
         if [ "$NEED_BUILD" = "true" ]; then
           BUILD_VERSION=$(date +%y.%-m.%-d)
-          printf "v2raya=${LATEST_TAG}\ngeosite_md5=${NEW_GEOSITE}\ngeoip_md5=${NEW_GEOIP}\nloyalsoldier_md5=${NEW_LOYAL}\nbuild_version=${BUILD_VERSION}\n" > VERSION
+          printf "v2raya=${LATEST_TAG}\ngeosite=${GEOSITE_TAG}\ngeoip=${GEOIP_TAG}\nloyalsoldier=${LOYAL_TAG}\nbuild_version=${BUILD_VERSION}\n" > "$VERSION_FILE"
           
           mkdir -p fnpack/app/geo
-          cp temp_geo/*.dat fnpack/app/geo/
+          echo "正在下载最新 dat 文件..."
+          curl -fsSL -o fnpack/app/geo/geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat
+          curl -fsSL -o fnpack/app/geo/geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat
+          curl -fsSL -o fnpack/app/geo/LoyalsoldierSite.dat https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat
           
           echo "version=${BUILD_VERSION}" >> $GITHUB_OUTPUT
           echo "v2raya_tag=${LATEST_TAG}" >> $GITHUB_OUTPUT
+          echo "geosite_tag=${GEOSITE_TAG}" >> $GITHUB_OUTPUT
+          echo "geoip_tag=${GEOIP_TAG}" >> $GITHUB_OUTPUT
+          echo "loyalsoldier_tag=${LOYAL_TAG}" >> $GITHUB_OUTPUT
           echo "need_build=true" >> $GITHUB_OUTPUT
           echo "准备打包版本: ${BUILD_VERSION}"
         else
           echo "所有组件均无更新，跳过打包"
           echo "need_build=false" >> $GITHUB_OUTPUT
         fi
-        rm -rf temp_geo
 
     - name: Download official v2rayA and v2rayA core binaries
       if: steps.check.outputs.need_build == 'true'
@@ -236,6 +249,12 @@ jobs:
           
           This version is automatically packaged by GitHub Actions.
           
+          ### Component Versions
+          - v2rayA: ${{ steps.check.outputs.v2raya_tag }}
+          - geosite.dat: ${{ steps.check.outputs.geosite_tag }}
+          - geoip.dat: ${{ steps.check.outputs.geoip_tag }}
+          - LoyalsoldierSite.dat: ${{ steps.check.outputs.loyalsoldier_tag }}
+          
           *Built on: ${{ steps.check.outputs.version }}*
         files: |
           ${{ steps.pack.outputs.x86_fpk }}
@@ -249,7 +268,7 @@ jobs:
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
         
-        git add fnpack/manifest fnpack/app/geo/ VERSION
+        git add fnpack/manifest fnpack/app/geo/ fnpack/app/VERSION
         
         DATE_VERSION="${{ steps.check.outputs.version }}"
         COMMIT_MSG="chore: auto update manifest and geo to version ${DATE_VERSION} [skip ci]"
